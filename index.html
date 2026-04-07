@@ -24,7 +24,16 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
 .btn-danger{background:var(--red-light);color:var(--red);border:1px solid #f5c0c0;font-size:12px;padding:4px 8px;}
 .btn-sm{padding:5px 10px;font-size:12px;}
-.page{display:none;padding:28px;}.page.active{display:block;}
+.page{display:none;}.page.active{display:block;}
+#page-dispatch{padding:0;height:calc(100vh - 52px);overflow:hidden;}
+.dispatch-layout{height:100%;padding:16px;}
+.dispatch-col-left{overflow-y:auto;height:100%;padding-right:8px;padding-bottom:16px;}
+.dispatch-col-right{overflow-y:auto;height:100%;padding-bottom:16px;}
+@media(max-width:768px){
+  #page-dispatch{height:auto;overflow:visible;}
+  .dispatch-layout{height:auto;}
+  .dispatch-col-left,.dispatch-col-right{overflow:visible;height:auto;padding:0;}
+}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;box-shadow:var(--shadow);}
 .card-title{font-size:14px;font-weight:700;margin-bottom:3px;}
 .card-sub{font-size:11px;color:var(--muted);margin-bottom:14px;font-family:'IBM Plex Mono',monospace;}
@@ -157,7 +166,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.2</span>
+    <span class="app-ver">v9.3</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -172,7 +181,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 <!-- ═══════════ DISPATCH ═══════════ -->
 <div class="page active" id="page-dispatch" style="display:block;">
   <div class="dispatch-layout">
-    <div style="display:flex;flex-direction:column;gap:12px;">
+    <div class="dispatch-col-left" style="display:flex;flex-direction:column;gap:12px;">
 
       <!-- Destination -->
       <div class="card">
@@ -203,11 +212,11 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
         <div class="card-title">🏷 Service</div>
         <div class="card-sub">Filtrer par service technicien</div>
         <div class="svc-row">
-          <button class="svc-btn active" onclick="selectService('ODM',this)"><span class="svc-icon">🌐</span><span class="svc-label">ODM</span><span class="svc-sub">Tous</span></button>
-          <button class="svc-btn" onclick="selectService('CHR',this)"><span class="svc-icon">🍽</span><span class="svc-label">CHR</span></button>
-          <button class="svc-btn" onclick="selectService('KEZIA',this)"><span class="svc-icon">💼</span><span class="svc-label">KEZIA</span></button>
-          <button class="svc-btn" onclick="selectService('SECU',this)"><span class="svc-icon">🔒</span><span class="svc-label">SECU</span></button>
-          <button class="svc-btn" onclick="selectService('TABAC',this)"><span class="svc-icon">🏪</span><span class="svc-label">TABAC</span></button>
+          <button class="svc-btn active" id="svc-ALL" onclick="toggleService('ALL',this)"><span class="svc-icon">🌐</span><span class="svc-label">Tous</span></button>
+          <button class="svc-btn" id="svc-CHR" onclick="toggleService('CHR',this)"><span class="svc-icon">🍽</span><span class="svc-label">CHR</span></button>
+          <button class="svc-btn" id="svc-KEZIA" onclick="toggleService('KEZIA',this)"><span class="svc-icon">💼</span><span class="svc-label">KEZIA</span></button>
+          <button class="svc-btn" id="svc-SECU" onclick="toggleService('SECU',this)"><span class="svc-icon">🔒</span><span class="svc-label">SECU</span></button>
+          <button class="svc-btn" id="svc-TABAC" onclick="toggleService('TABAC',this)"><span class="svc-icon">🏪</span><span class="svc-label">TABAC</span></button>
         </div>
       </div>
 
@@ -246,21 +255,8 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
         <div class="card-sub">Créneau chaque jour ouvré</div>
         <div class="period-row">
           <button class="per-btn" onclick="selectPeriod('morning',this)"><span class="pi">🌅</span>Matin<span class="pr">9h–12h</span></button>
-          <button class="per-btn active" onclick="selectPeriod('afternoon',this)"><span class="pi">☀️</span>Après-midi<span class="pr">14h–18h</span></button>
-          <button class="per-btn" onclick="selectPeriod('allday',this)"><span class="pi">🗓</span>Journée<span class="pr">9h–18h</span></button>
-        </div>
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px;">Heure approx. <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optionnel)</span></div>
-        <div class="approx-row">
-          <input type="range" id="approxSlider" min="9" max="18" step="1" value="14" oninput="onApproxSlide()" />
-          <div class="approx-disp" id="approxDisp">14h00</div>
-          <button class="btn btn-secondary btn-sm" id="approxToggle" onclick="toggleApprox()">✕</button>
-        </div>
-        <div class="tol-row">
-          <span style="font-size:11px;color:var(--muted);">Tolérance ±</span>
-          <button class="tol-btn active" data-t="60" onclick="selectTol(this)">1h</button>
-          <button class="tol-btn" data-t="90" onclick="selectTol(this)">1h30</button>
-          <button class="tol-btn" data-t="120" onclick="selectTol(this)">2h</button>
-          <button class="tol-btn" data-t="180" onclick="selectTol(this)">3h</button>
+          <button class="per-btn" onclick="selectPeriod('afternoon',this)"><span class="pi">☀️</span>Après-midi<span class="pr">14h–18h</span></button>
+          <button class="per-btn active" onclick="selectPeriod('allday',this)"><span class="pi">🗓</span>Journée<span class="pr">9h–18h</span></button>
         </div>
         <div class="time-prev" id="timePrev"></div>
       </div>
@@ -272,7 +268,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
       <div id="searchAlert"></div>
     </div>
 
-    <div class="results-area" id="resultsArea">
+    <div class="dispatch-col-right results-area" id="resultsArea">
       <div class="empty-res">
         <div style="font-size:44px;margin-bottom:10px;">👥</div>
         <p style="font-family:'IBM Plex Mono',monospace;font-size:12px;">Saisissez une destination et lancez la recherche.</p>
@@ -393,8 +389,8 @@ function isWorkDay(date){
 // STATE
 // ══════════════════════════════════════════════════
 let gToken=null,technicians=[],settings={margin:15};
-let clientId='',selectedService='ODM',selectedAgency='ALL',selectedPeriod='afternoon';
-let approxActive=true,approxHour=14,toleranceMin=60,delayDays=2;
+let clientId='',selectedServices=new Set(['ALL']),selectedAgency='ALL',selectedPeriod='allday';
+let approxActive=false,approxHour=13,toleranceMin=270,delayDays=2;
 let destCoords=null,acSuggestions=[],acIndex=-1,acTimer=null;
 const PERIODS={morning:{start:9,end:12},afternoon:{start:14,end:18},allday:{start:9,end:18}};
 const COLORS=['#1a3aff','#0d7a3e','#c45c00','#8b1a8b','#c41a1a','#00838f','#5d4037','#2e7d32','#1565c0','#6a1b9a','#ad1457','#00695c','#f57f17','#37474f','#4e342e'];
@@ -567,7 +563,30 @@ function hideAC(){document.getElementById('acList').style.display='none';acSugge
 // ══════════════════════════════════════════════════
 // SERVICE / AGENCY / DELAY / PERIOD
 // ══════════════════════════════════════════════════
-function selectService(svc,btn){selectedService=svc;document.querySelectorAll('.svc-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function toggleService(svc,btn){
+  if(svc==='ALL'){
+    // Tout sélectionner
+    selectedServices=new Set(['ALL']);
+    document.querySelectorAll('.svc-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('svc-ALL').classList.add('active');
+    return;
+  }
+  // Désactiver "Tous" si on choisit un service spécifique
+  selectedServices.delete('ALL');
+  document.getElementById('svc-ALL').classList.remove('active');
+  if(selectedServices.has(svc)){
+    selectedServices.delete(svc);
+    btn.classList.remove('active');
+  }else{
+    selectedServices.add(svc);
+    btn.classList.add('active');
+  }
+  // Si rien de sélectionné → revenir à Tous
+  if(selectedServices.size===0){
+    selectedServices.add('ALL');
+    document.getElementById('svc-ALL').classList.add('active');
+  }
+}
 
 function selectAgency(ag,btn){selectedAgency=ag;document.querySelectorAll('.ag-pill').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
 
@@ -608,14 +627,13 @@ function toggleApprox(){
 }
 function selectTol(btn){toleranceMin=parseInt(btn.dataset.t);document.querySelectorAll('.tol-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');updateTimePrev();}
 function updateTimePrev(){
-  const p=PERIODS[selectedPeriod];let ws=p.start*60,we=p.end*60;
-  if(approxActive){ws=Math.max(ws,approxHour*60-toleranceMin);we=Math.min(we,approxHour*60+toleranceMin);}
+  const p=PERIODS[selectedPeriod];
   const f=m=>String(Math.floor(m/60)).padStart(2,'0')+'h'+String(m%60).padStart(2,'0');
-  document.getElementById('timePrev').textContent='→ Créneau : '+f(ws)+' – '+f(we)+' (hors fériés & week-ends)';
+  document.getElementById('timePrev').textContent='→ Créneau : '+f(p.start*60)+' – '+f(p.end*60)+' (hors fériés & week-ends)';
 }
 function getTimeWin(date){
   const p=PERIODS[selectedPeriod];let ws=p.start*60,we=p.end*60;
-  if(approxActive){ws=Math.max(ws,approxHour*60-toleranceMin);we=Math.min(we,approxHour*60+toleranceMin);}
+  // heure approx désactivée
   const now=new Date();
   if(date.toDateString()===now.toDateString()){const nm=now.getHours()*60+now.getMinutes(),nr=Math.ceil(nm/15)*15;ws=Math.max(ws,nr,9*60);}
   else{ws=Math.max(ws,9*60);}
@@ -868,7 +886,12 @@ async function runSearch(){
   }
 
   // 2. Filtrage pool
-  let pool=selectedService==='ODM'?[...technicians]:technicians.filter(t=>(t.service||'').toUpperCase()===selectedService);
+  let pool;
+  if(selectedServices.has('ALL')){
+    pool=[...technicians];
+  }else{
+    pool=technicians.filter(t=>selectedServices.has((t.service||'').toUpperCase()));
+  }
   if(selectedAgency!=='ALL')pool=pool.filter(t=>(t.agency||'').trim()===selectedAgency);
   if(!pool.length){ra.innerHTML='';return alert2('warn','Aucun technicien pour ce service / cette agence.');}
   const wins=getDayWindows();
@@ -1050,7 +1073,7 @@ function alert2(type,msg){const icons={warn:'⚠',err:'✕',ok:'✓'};document.g
 // ══════════════════════════════════════════════════
 function renderResults(res,total,errors,dest,dc,dur){
   const ra=document.getElementById('resultsArea');
-  const svcLbl=selectedService==='ODM'?'Tous services':selectedService;
+  const svcLbl=selectedServices.has('ALL')?'Tous services':[...selectedServices].join('+');
   const agLbl=selectedAgency==='ALL'?'Toutes agences':selectedAgency;
   const delLbl=delayDays===0?"Aujourd'hui":delayDays===1?'Demain':delayDays+'j';
 
