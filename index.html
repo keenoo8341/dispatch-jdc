@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dispatch — Optimiseur d'équipe terrain</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Familjen+Grotesk:wght@400;500;600;700&display=swap');
+:root{--bg:#f5f3ee;--surface:#fff;--surface2:#edeae3;--border:#d8d4ca;--text:#1a1916;--muted:#8a8680;--accent:#1a3aff;--accent-light:#e8ecff;--green:#0d7a3e;--green-light:#e6f4ed;--orange:#c45c00;--orange-light:#fff0e3;--red:#c41a1a;--red-light:#fde8e8;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.04);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.topbar{background:var(--text);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:52px;position:sticky;top:0;z-index:200;}
+.topbar-left{display:flex;align-items:center;gap:16px;}
+.logo-mark{width:28px;height:28px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.app-name{font-size:15px;font-weight:700;letter-spacing:-.3px;}
+.app-ver{font-family:'IBM Plex Mono',monospace;font-size:10px;color:#666;background:#2a2a2a;padding:2px 6px;border-radius:4px;}
+.nav-tabs{display:flex;gap:2px;}
+.nav-tab{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;color:#aaa;border:none;background:none;transition:all .15s;font-family:'Familjen Grotesk',sans-serif;}
+.nav-tab:hover{color:#fff;background:#2a2a2a;}.nav-tab.active{color:#fff;background:var(--accent);}
+.auth-status{font-family:'IBM Plex Mono',monospace;font-size:11px;display:flex;align-items:center;gap:6px;}
+.dot{width:7px;height:7px;border-radius:50%;background:#555;}.dot.ok{background:#4cde80;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;font-family:'Familjen Grotesk',sans-serif;font-weight:600;font-size:13px;cursor:pointer;border:none;transition:all .15s;}
+.btn-primary{background:var(--accent);color:#fff;}.btn-primary:hover{background:#0c28e0;}.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+.btn-danger{background:var(--red-light);color:var(--red);border:1px solid #f5c0c0;font-size:12px;padding:4px 8px;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.page{display:none;padding:28px;}.page.active{display:block;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;box-shadow:var(--shadow);}
+.card-title{font-size:14px;font-weight:700;margin-bottom:3px;}
+.card-sub{font-size:11px;color:var(--muted);margin-bottom:14px;font-family:'IBM Plex Mono',monospace;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px;}
+.field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:'Familjen Grotesk',sans-serif;outline:none;transition:border-color .2s;}
+.field input:focus,.field select:focus{border-color:var(--accent);background:#fff;}
+.field-hint{font-size:11px;color:var(--muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}
+/* Layout */
+.dispatch-layout{display:grid;grid-template-columns:360px 1fr;gap:20px;max-width:1280px;}
+/* Autocomplete */
+.dest-wrap{position:relative;}
+.dest-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:9px 12px;font-size:13px;font-family:'Familjen Grotesk',sans-serif;outline:none;transition:border-color .2s;}
+.dest-input:focus{border-color:var(--accent);background:#fff;}
+.ac-list{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:300;max-height:260px;overflow-y:auto;}
+.ac-item{padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);line-height:1.4;}
+.ac-item:last-child{border-bottom:none;}
+.ac-item:hover,.ac-item.hi{background:var(--accent-light);}
+.ac-main{font-weight:600;}.ac-sub{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:1px;}
+/* Service */
+.svc-row{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;}
+.svc-btn{border:1px solid var(--border);border-radius:7px;background:var(--surface2);padding:8px 3px;font-family:'Familjen Grotesk',sans-serif;font-size:11px;font-weight:700;cursor:pointer;text-align:center;transition:all .15s;color:var(--text);line-height:1.3;}
+.svc-btn:hover{border-color:var(--accent);color:var(--accent);}
+.svc-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.svc-icon{font-size:15px;display:block;margin-bottom:2px;}.svc-label{display:block;font-size:11px;font-weight:700;}.svc-sub{display:block;font-size:9px;opacity:.75;}
+/* Agency filter */
+.agency-pills{display:flex;flex-wrap:wrap;gap:5px;}
+.ag-pill{font-size:12px;padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-family:'Familjen Grotesk',sans-serif;font-weight:600;color:var(--muted);transition:all .12s;}
+.ag-pill:hover{border-color:var(--accent);color:var(--accent);}
+.ag-pill.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+/* Delay */
+.delay-presets{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
+.delay-pre{font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-family:'IBM Plex Mono',monospace;color:var(--muted);transition:all .12s;font-weight:500;}
+.delay-pre:hover{border-color:var(--accent);color:var(--accent);}
+.delay-pre.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
+.delay-row{display:flex;align-items:center;gap:10px;}
+.delay-row input[type=range]{flex:1;accent-color:var(--accent);}
+.delay-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:4px 10px;min-width:70px;text-align:center;white-space:nowrap;}
+/* Period */
+.period-row{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:12px;}
+.per-btn{border:1px solid var(--border);border-radius:7px;background:var(--surface2);padding:8px 4px;font-family:'Familjen Grotesk',sans-serif;font-size:11px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s;color:var(--text);}
+.per-btn:hover{border-color:var(--accent);color:var(--accent);}
+.per-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.per-btn .pi{font-size:16px;display:block;margin-bottom:2px;}
+.per-btn .pr{font-size:9px;opacity:.75;font-family:'IBM Plex Mono',monospace;}
+.approx-row{display:flex;align-items:center;gap:8px;}
+.approx-row input[type=range]{flex:1;accent-color:var(--accent);}
+.approx-disp{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:4px 9px;min-width:50px;text-align:center;}
+.tol-row{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap;align-items:center;}
+.tol-btn{font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-family:'IBM Plex Mono',monospace;color:var(--muted);transition:all .12s;}
+.tol-btn.active{background:var(--accent-light);border-color:var(--accent);color:var(--accent);font-weight:600;}
+.time-prev{margin-top:8px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:6px 10px;}
+/* Results */
+.results-area{display:flex;flex-direction:column;gap:12px;}
+.result-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;box-shadow:var(--shadow);display:grid;grid-template-columns:44px 1fr auto;gap:14px;align-items:center;transition:all .15s;position:relative;overflow:hidden;}
+.result-card:hover{border-color:var(--accent);box-shadow:0 4px 20px rgba(26,58,255,.08);}
+.result-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green);}
+.rank{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0;}
+.r1{background:#ffd700;color:#7a5c00;}.r2{background:#e0e0e0;color:#555;}.r3{background:#e8c9a0;color:#7a4a00;}.rn{background:var(--surface2);color:var(--muted);}
+.result-name{font-size:14px;font-weight:700;}
+.pill{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 8px;border-radius:4px;display:inline-block;}
+.pill-free{background:var(--green-light);color:var(--green);}
+.pill-dep{background:#fff3cd;color:#856404;}
+.pill-approx{background:var(--orange-light);color:var(--orange);font-size:10px;}
+.dispo-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;}
+.dispo-ok{background:var(--green-light);color:var(--green);}
+.day-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#fff3cd;color:#856404;border:1px solid #ffc107;font-family:'IBM Plex Mono',monospace;}
+.result-meta{text-align:right;flex-shrink:0;min-width:90px;}
+.dist-val{font-size:19px;font-weight:800;color:var(--accent);}
+.dist-unit{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+.dist-lbl{font-size:10px;color:var(--muted);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
+.empty-res{text-align:center;padding:50px 20px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:12px;}
+.loading-card{text-align:center;padding:36px;background:var(--surface);border:1px solid var(--border);border-radius:12px;}
+.pbar-wrap{background:var(--surface2);border-radius:4px;height:5px;margin:10px 0;overflow:hidden;}
+.pbar{height:100%;background:var(--accent);border-radius:4px;transition:width .3s;}
+/* Config */
+.config-layout{display:grid;grid-template-columns:340px 1fr;gap:20px;max-width:1100px;}
+.tech-wrap{border:1px solid var(--border);border-radius:8px;max-height:340px;overflow-y:auto;margin-bottom:14px;}
+.tech-tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tech-tbl th{background:var(--surface2);padding:6px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);position:sticky;top:0;}
+.tech-tbl td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.tech-tbl tr:last-child td{border-bottom:none;}
+.tech-tbl tr:hover td{background:var(--accent-light);}
+.av{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;vertical-align:middle;margin-right:5px;}
+.svc-tag{font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;background:var(--accent-light);color:var(--accent);font-family:'IBM Plex Mono',monospace;}
+.paste-zone{border:2px dashed var(--border);border-radius:8px;background:var(--surface2);padding:12px;transition:border-color .2s;}
+.paste-zone:focus-within{border-color:var(--accent);background:#fff;}
+.paste-zone textarea{width:100%;background:transparent;border:none;outline:none;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text);resize:vertical;min-height:80px;line-height:1.6;}
+.alert{border-radius:8px;padding:10px 13px;font-size:12px;display:flex;gap:7px;align-items:flex-start;line-height:1.4;}
+.alert-warn{background:var(--orange-light);border:1px solid #f5c080;color:var(--orange);}
+.alert-err{background:var(--red-light);border:1px solid #f5a0a0;color:var(--red);}
+.alert-ok{background:var(--green-light);border:1px solid #8fd4b0;color:var(--green);}
+.alert-info{background:var(--accent-light);border:1px solid #a0b4ff;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.badge{display:inline-flex;align-items:center;font-size:11px;padding:2px 7px;border-radius:20px;font-weight:600;}
+.badge-info{background:var(--accent-light);color:var(--accent);}
+.mi{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;font-family:'Familjen Grotesk',sans-serif;outline:none;display:block;}
+.mi:focus{border-color:var(--accent);background:#fff;}
+::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-mark">📡</div>
+    <span class="app-name">Dispatch</span>
+    <span class="app-ver">v8.8</span>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
+    <button class="nav-tab" onclick="showPage('config',this)">⚙️ Configuration</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="auth-status"><div class="dot" id="authDot"></div><span id="authLabel">Non connecté</span></div>
+    <button class="btn btn-primary btn-sm" id="authBtn" onclick="handleAuth()">Se connecter</button>
+  </div>
+</div>
+
+<!-- ═══════════ DISPATCH ═══════════ -->
+<div class="page active" id="page-dispatch">
+  <div class="dispatch-layout">
+    <div style="display:flex;flex-direction:column;gap:12px;">
+
+      <!-- Destination -->
+      <div class="card">
+        <div class="card-title">📍 Destination</div>
+        <div class="card-sub">Ville ou code postal</div>
+        <div class="dest-wrap">
+          <input type="text" id="dest" class="dest-input" placeholder="Ex : Toulon, 83000…" autocomplete="off" oninput="onDestInput()" onkeydown="onDestKey(event)" />
+          <div class="ac-list" id="acList" style="display:none;"></div>
+        </div>
+        <div id="destConfirm" style="font-size:11px;color:var(--green);font-family:'IBM Plex Mono',monospace;margin-top:5px;min-height:15px;"></div>
+      </div>
+
+      <!-- Durée (juste sous destination) -->
+      <div class="card">
+        <div class="card-title">⏱ Durée intervention</div>
+        <select id="duration" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:'Familjen Grotesk',sans-serif;outline:none;">
+          <option value="30">30 minutes</option>
+          <option value="60" selected>1 heure</option>
+          <option value="90">1h30</option>
+          <option value="120">2 heures</option>
+          <option value="180">3 heures</option>
+          <option value="240">4 heures</option>
+        </select>
+      </div>
+
+      <!-- Service -->
+      <div class="card">
+        <div class="card-title">🏷 Service</div>
+        <div class="card-sub">Filtrer par service technicien</div>
+        <div class="svc-row">
+          <button class="svc-btn active" onclick="selectService('ODM',this)"><span class="svc-icon">🌐</span><span class="svc-label">ODM</span><span class="svc-sub">Tous</span></button>
+          <button class="svc-btn" onclick="selectService('CHR',this)"><span class="svc-icon">🍽</span><span class="svc-label">CHR</span></button>
+          <button class="svc-btn" onclick="selectService('KEZIA',this)"><span class="svc-icon">💼</span><span class="svc-label">KEZIA</span></button>
+          <button class="svc-btn" onclick="selectService('SECU',this)"><span class="svc-icon">🔒</span><span class="svc-label">SECU</span></button>
+          <button class="svc-btn" onclick="selectService('TABAC',this)"><span class="svc-icon">🏪</span><span class="svc-label">TABAC</span></button>
+        </div>
+      </div>
+
+      <!-- Agence -->
+      <div class="card">
+        <div class="card-title">🏢 Agence</div>
+        <div class="card-sub">Filtrer par agence de rattachement</div>
+        <div class="agency-pills" id="agencyPills">
+          <button class="ag-pill active" onclick="selectAgency('ALL',this)">Toutes les agences</button>
+        </div>
+      </div>
+
+      <!-- Délai -->
+      <div class="card">
+        <div class="card-title">⏳ Délai maximum</div>
+        <div class="card-sub">Dans combien de jours au maximum ?</div>
+        <div class="delay-presets">
+          <button class="delay-pre" onclick="setDelay(0,this)">Auj.</button>
+          <button class="delay-pre" onclick="setDelay(1,this)">Demain</button>
+          <button class="delay-pre active" onclick="setDelay(2,this)">48h</button>
+          <button class="delay-pre" onclick="setDelay(3,this)">72h</button>
+          <button class="delay-pre" onclick="setDelay(7,this)">1 sem.</button>
+          <button class="delay-pre" onclick="setDelay(15,this)">15j</button>
+          <button class="delay-pre" onclick="setDelay(30,this)">1 mois</button>
+        </div>
+        <div class="delay-row">
+          <input type="range" id="delaySlider" min="0" max="30" step="1" value="2" oninput="onDelaySlide()" />
+          <div class="delay-val" id="delayVal">48h</div>
+        </div>
+        <div id="delayInfo" style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--muted);margin-top:6px;"></div>
+      </div>
+
+      <!-- Période -->
+      <div class="card">
+        <div class="card-title">🕐 Période souhaitée</div>
+        <div class="card-sub">Créneau chaque jour ouvré</div>
+        <div class="period-row">
+          <button class="per-btn" onclick="selectPeriod('morning',this)"><span class="pi">🌅</span>Matin<span class="pr">9h–12h</span></button>
+          <button class="per-btn active" onclick="selectPeriod('afternoon',this)"><span class="pi">☀️</span>Après-midi<span class="pr">14h–18h</span></button>
+          <button class="per-btn" onclick="selectPeriod('allday',this)"><span class="pi">🗓</span>Journée<span class="pr">9h–18h</span></button>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px;">Heure approx. <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optionnel)</span></div>
+        <div class="approx-row">
+          <input type="range" id="approxSlider" min="9" max="18" step="1" value="14" oninput="onApproxSlide()" />
+          <div class="approx-disp" id="approxDisp">14h00</div>
+          <button class="btn btn-secondary btn-sm" id="approxToggle" onclick="toggleApprox()">✕</button>
+        </div>
+        <div class="tol-row">
+          <span style="font-size:11px;color:var(--muted);">Tolérance ±</span>
+          <button class="tol-btn active" data-t="60" onclick="selectTol(this)">1h</button>
+          <button class="tol-btn" data-t="90" onclick="selectTol(this)">1h30</button>
+          <button class="tol-btn" data-t="120" onclick="selectTol(this)">2h</button>
+          <button class="tol-btn" data-t="180" onclick="selectTol(this)">3h</button>
+        </div>
+        <div class="time-prev" id="timePrev"></div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;font-size:14px;" onclick="runSearch()">
+        ⚡ Trouver le meilleur technicien
+      </button>
+
+      <div id="searchAlert"></div>
+    </div>
+
+    <div class="results-area" id="resultsArea">
+      <div class="empty-res">
+        <div style="font-size:44px;margin-bottom:10px;">👥</div>
+        <p style="font-family:'IBM Plex Mono',monospace;font-size:12px;">Saisissez une destination et lancez la recherche.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ CONFIG ═══════════ -->
+<div class="page" id="page-config">
+  <div class="config-layout">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div class="card">
+        <div class="card-title">🔑 Google Calendar API</div>
+        <div class="card-sub">Connexion pré-configurée</div>
+        <div class="alert alert-info">Cliquez sur "Se connecter" dans la barre du haut pour autoriser l'accès à Google Calendar et Google Sheets.</div>
+      </div>
+        </div>
+        <div class="alert alert-info" style="margin-bottom:10px;">Origines JS autorisées = URL exacte d'ouverture du fichier.</div>
+        
+        <div class="field" style="margin-top:14px;">
+          <label>ID Google Sheet techniciens</label>
+          <input type="text" id="cfgSheetId" placeholder="1aOtAtBAcuH2DDno-wLYaAlu0bY_ddENhXXZVdHBCZR0" />
+          <div class="field-hint">URL du Sheet : /d/<b>XXXX</b>/edit — copier la partie XXXX</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="loadSheetBtn" onclick="loadSheet()" disabled>📥 Charger depuis Google Sheet</button>
+        <div id="sheetStatus" style="font-size:11px;margin-top:6px;font-family:IBM Plex Mono,monospace;color:var(--muted);"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚙️ Paramètres</div>
+        <div class="card-sub">Règles métier</div>
+        <div class="field">
+          <label>Marge entre RDV (min)</label>
+          <input type="number" id="cfgMargin" value="15" min="0" max="60" step="5" />
+          <div class="field-hint">Temps tampon après chaque RDV</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="saveSettings()">💾 Enregistrer</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div class="card-title">👷 Techniciens <span class="badge badge-info" id="techCount">0</span></div>
+        <button class="btn btn-danger btn-sm" onclick="clearAllTechs()">🗑 Tout effacer</button>
+      </div>
+      <div class="card-sub">5 colonnes Excel : <b>Nom · Email · Adresse domicile · Service · Nom agence</b></div>
+
+      <div class="tech-wrap">
+        <table class="tech-tbl">
+          <thead><tr><th>Nom</th><th>Email</th><th>Domicile</th><th>Service</th><th>Agence</th><th></th></tr></thead>
+          <tbody id="techTbody"></tbody>
+        </table>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:7px;">📋 Import Excel (copier-coller)</div>
+        <div class="alert alert-info" style="margin-bottom:8px;">
+          5 colonnes : <b>Nom · Email · Adresse domicile · Service · Nom agence</b> (ex: Agence La Garde)<br>
+          Séparateur tabulation (copie directe Excel). Une ligne = un technicien.
+        </div>
+        <div class="paste-zone">
+          <textarea id="pasteArea" placeholder="Dupont Jean&#9;jean@jdc.fr&#9;12 rue Hugo, Toulon&#9;CHR&#9;Agence La Garde&#10;Martin Sophie&#9;s.martin@jdc.fr&#9;8 av Foch, Nice&#9;KEZIA&#9;Agence Valbonne" oninput="previewPaste()"></textarea>
+        </div>
+        <div style="font-size:11px;color:var(--green);font-family:'IBM Plex Mono',monospace;min-height:16px;margin-top:5px;" id="pastePreview"></div>
+        <div style="display:flex;gap:8px;margin-top:7px;">
+          <button class="btn btn-primary btn-sm" onclick="importPaste()">⬆ Importer</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('pasteArea').value='';document.getElementById('pastePreview').textContent='';">Effacer</button>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:14px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:9px;">➕ Ajouter manuellement</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px;">
+          <input type="text" id="newName" placeholder="Nom complet" class="mi" />
+          <input type="email" id="newEmail" placeholder="email@jdc.fr" class="mi" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px;">
+          <input type="text" id="newAddress" placeholder="Adresse domicile" class="mi" />
+          <select id="newService" class="mi">
+            <option value="">-- Service --</option>
+            <option value="CHR">CHR</option><option value="KEZIA">KEZIA</option>
+            <option value="SECU">SECU</option><option value="TABAC">TABAC</option>
+          </select>
+        </div>
+        <input type="text" id="newAgency" placeholder="Nom agence (ex: Agence La Garde)" class="mi" style="margin-bottom:7px;" />
+        <button class="btn btn-primary btn-sm" onclick="addManual()">Ajouter</button>
+      </div>
+      <div id="configAlert" style="margin-top:10px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+// JOURS FÉRIÉS FRANCE
+// ══════════════════════════════════════════════════
+function getFeries(y){
+  const s=new Set();
+  const add=(m,d)=>s.add(y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'));
+  add(1,1);add(5,1);add(5,8);add(7,14);add(8,15);add(11,1);add(11,11);add(12,25);
+  const a=y%19,b=Math.floor(y/100),cc=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(cc/4),k=cc%4,l=(32+2*e+2*i-h-k)%7,m2=Math.floor((a+11*h+22*l)/451),month=Math.floor((h+l-7*m2+114)/31),day=((h+l-7*m2+114)%31)+1;
+  const er=new Date(y,month-1,day);
+  const addE=dd=>{const t=new Date(er);t.setDate(t.getDate()+dd);add(t.getMonth()+1,t.getDate());};
+  addE(1);addE(39);addE(49);addE(50);
+  return s;
+}
+function isWorkDay(date){
+  const dow=date.getDay();
+  if(dow===0||dow===6)return false;
+  const y=date.getFullYear();
+  const key=y+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+  return !getFeries(y).has(key);
+}
+
+// ══════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════
+let gToken=null,technicians=[],settings={margin:15};
+let clientId='',selectedService='ODM',selectedAgency='ALL',selectedPeriod='afternoon';
+let approxActive=true,approxHour=14,toleranceMin=60,delayDays=2;
+let destCoords=null,acSuggestions=[],acIndex=-1,acTimer=null;
+const PERIODS={morning:{start:9,end:12},afternoon:{start:14,end:18},allday:{start:9,end:18}};
+const COLORS=['#1a3aff','#0d7a3e','#c45c00','#8b1a8b','#c41a1a','#00838f','#5d4037','#2e7d32','#1565c0','#6a1b9a','#ad1457','#00695c','#f57f17','#37474f','#4e342e'];
+
+// Utilities — defined early so available everywhere
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const fdur=s=>{const h=Math.floor(s/3600),m=Math.round((s%3600)/60);return h?h+'h'+String(m).padStart(2,'0'):m+' min';};
+const fdist=m=>m>=1000?(m/1000).toFixed(1)+' km':Math.round(m)+' m';
+const ftime=ts=>new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+const fdate=d=>d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+const ini=n=>n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+
+// ══════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════
+// Mapping département → agence
+function deptToAgency(dept){
+  const d=(dept||'').toString().trim();
+  if(d==='83'||d.startsWith('83'))return 'Agence 83130 La Garde';
+  if(d==='06'||d.startsWith('06'))return 'Agence 06560 Valbonne';
+  return d; // sinon retourner tel quel
+}
+
+async function loadSheet(){
+  // ID fixe du Sheet + onglet BDD
+  const SHEET_ID = '1aOtAtBAcuH2DDno-wLYaAlu0bY_ddENhXXZVdHBCZR0';
+  const SHEET_TAB = 'BDD';
+  const sid = document.getElementById('cfgSheetId').value.trim() || SHEET_ID;
+  if(!gToken) return cfgAlert('warn','Connectez-vous d\'abord à Google.');
+  const statusEl = document.getElementById('sheetStatus');
+  statusEl.textContent = 'Chargement…';
+  statusEl.style.color = 'var(--muted)';
+  try {
+    // Lire A:F depuis l'onglet BDD, ligne 2 en avant (ignorer entête)
+    const range = encodeURIComponent(SHEET_TAB + '!A2:F500');
+    const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sid + '/values/' + range;
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + gToken } });
+    if (!r.ok) {
+      const e = await r.json();
+      throw new Error(e.error?.message || ('HTTP ' + r.status));
+    }
+    const data = await r.json();
+    const rows = data.values || [];
+    if (!rows.length) { statusEl.textContent = 'Aucune donnée trouvée dans l\'onglet BDD.'; return; }
+
+    let added = 0, updated = 0, skipped = 0;
+    for (const row of rows) {
+      const name    = (row[0] || '').trim();  // Colonne A — Nom
+      const service = (row[1] || '').trim().toUpperCase(); // Colonne B — Service
+      // Colonne C ignorée
+      const dept    = (row[3] || '').trim();  // Colonne D — Département → Agence
+      const email   = (row[4] || '').trim();  // Colonne E — Email Calendar
+      const address = (row[5] || '').trim();  // Colonne F — Adresse domicile
+
+      // Ignorer les lignes sans nom ou sans email (lignes vides)
+      if (!name || !email || !email.includes('@')) { skipped++; continue; }
+
+      const agency = deptToAgency(dept);
+      const ex = technicians.find(t => t.email.toLowerCase() === email.toLowerCase());
+      if (ex) {
+        ex.name = name;
+        ex.service = service;
+        ex.agency = agency;
+        if (address) ex.address = address;
+        updated++;
+      } else {
+        technicians.push({
+          id: Date.now() + Math.random() + '',
+          name, email, address, service, agency,
+          color: COLORS[technicians.length % COLORS.length]
+        });
+        added++;
+      }
+    }
+    saveTechs(); renderTechTable(); buildAgencyPills();
+    const msg = added + ' ajouté(s), ' + updated + ' mis à jour' + (skipped ? ', ' + skipped + ' ligne(s) vide(s) ignorée(s)' : '') + '.';
+    statusEl.textContent = '✓ ' + msg;
+    statusEl.style.color = 'var(--green)';
+    cfgAlert('ok', msg);
+  } catch(e) {
+    statusEl.textContent = '✗ ' + e.message;
+    statusEl.style.color = 'var(--red)';
+    cfgAlert('err', 'Erreur Sheet : ' + e.message);
+  }
+}
+
+function init(){
+  clientId='85425048620-q9bqlfu13b0ll45umh8c05b06ldc13c2.apps.googleusercontent.com';
+  technicians=JSON.parse(localStorage.getItem('dsp_techs')||'[]');
+  const sv=localStorage.getItem('dsp_settings');
+  if(sv)settings={...settings,...JSON.parse(sv)};
+  // clientId hardcodé — pas de champ UI
+  const sid=localStorage.getItem('dsp_sheetId')||'1aOtAtBAcuH2DDno-wLYaAlu0bY_ddENhXXZVdHBCZR0';
+  if(document.getElementById('cfgSheetId'))document.getElementById('cfgSheetId').value=sid;
+  document.getElementById('cfgMargin').value=settings.margin;
+  renderTechTable();
+  buildAgencyPills();
+  updateDelayInfo();
+  updateTimePrev();
+  loadGAPI(); // clientId hardcodé, chargement auto
+  document.addEventListener('click',e=>{if(!e.target.closest('.dest-wrap'))hideAC();});
+}
+
+// ══════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(el)el.classList.add('active');
+}
+
+// ══════════════════════════════════════════════════
+// AUTOCOMPLETE
+// ══════════════════════════════════════════════════
+function onDestInput(){
+  destCoords=null;document.getElementById('destConfirm').textContent='';
+  const q=document.getElementById('dest').value.trim();
+  if(q.length<2){hideAC();return;}
+  clearTimeout(acTimer);acTimer=setTimeout(()=>fetchAC(q),350);
+}
+async function fetchAC(q){
+  try{
+    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=8&countrycodes=fr&addressdetails=1',{headers:{'Accept-Language':'fr'}});
+    acSuggestions=await r.json();acIndex=-1;renderAC();
+  }catch(e){hideAC();}
+}
+function renderAC(){
+  const list=document.getElementById('acList');
+  if(!acSuggestions.length){hideAC();return;}
+  list.innerHTML=acSuggestions.map((item,i)=>{
+    const a=item.address||{};
+    const main=a.city||a.town||a.village||a.municipality||item.display_name.split(',')[0];
+    const cp=a.postcode||'';
+    return '<div class="ac-item" onmousedown="selectAC('+i+')">'
+      +'<div class="ac-main">'+main+(cp?' <span style="color:var(--muted);font-weight:400;">('+cp+')</span>':'')+'</div>'
+      +'<div class="ac-sub">'+item.display_name.substring(0,72)+'</div></div>';
+  }).join('');
+  list.style.display='block';
+}
+function selectAC(i){
+  const item=acSuggestions[i];if(!item)return;
+  const a=item.address||{};
+  const main=a.city||a.town||a.village||a.municipality||item.display_name.split(',')[0];
+  const cp=a.postcode||'';
+  document.getElementById('dest').value=cp?cp+' '+main:main;
+  destCoords={lat:+item.lat,lon:+item.lon,display:item.display_name};
+  document.getElementById('destConfirm').textContent='✓ '+item.display_name.substring(0,68);
+  hideAC();
+}
+function onDestKey(e){
+  const items=document.getElementById('acList').querySelectorAll('.ac-item');
+  if(e.key==='ArrowDown'){acIndex=Math.min(acIndex+1,items.length-1);hiliteAC(items);e.preventDefault();}
+  else if(e.key==='ArrowUp'){acIndex=Math.max(acIndex-1,-1);hiliteAC(items);e.preventDefault();}
+  else if(e.key==='Enter'&&acIndex>=0){selectAC(acIndex);e.preventDefault();}
+  else if(e.key==='Escape')hideAC();
+}
+function hiliteAC(items){items.forEach((el,i)=>el.classList.toggle('hi',i===acIndex));if(acIndex>=0)items[acIndex].scrollIntoView({block:'nearest'});}
+function hideAC(){document.getElementById('acList').style.display='none';acSuggestions=[];acIndex=-1;}
+
+// ══════════════════════════════════════════════════
+// SERVICE / AGENCY / DELAY / PERIOD
+// ══════════════════════════════════════════════════
+function selectService(svc,btn){selectedService=svc;document.querySelectorAll('.svc-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+
+function selectAgency(ag,btn){selectedAgency=ag;document.querySelectorAll('.ag-pill').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+
+function buildAgencyPills(){
+  const wrap=document.getElementById('agencyPills');if(!wrap)return;
+  // Collect unique agency names from technicians
+  const names=[...new Set(technicians.map(t=>(t.agency||'').trim()).filter(a=>a.length>0))].sort();
+  let html='<button class="ag-pill'+(selectedAgency==='ALL'?' active':'')+'" onclick="selectAgency(\'ALL\',this)">Toutes les agences</button>';
+  for(const ag of names){
+    const esc=ag.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    html+='<button class="ag-pill'+(selectedAgency===ag?' active':'')+'" onclick="selectAgency(\''+ag.replace(/'/g,"\\'")+'\',this)">'+ag+'</button>';
+  }
+  wrap.innerHTML=html;
+}
+
+function setDelay(d,btn){delayDays=d;document.getElementById('delaySlider').value=d;document.querySelectorAll('.delay-pre').forEach(b=>b.classList.toggle('active',parseInt(b.textContent)===(d===0?0:d===1?1:d===2?2:d===3?3:d===7?7:d===15?15:30)||b.onclick.toString().includes('setDelay('+d+',')));updateDelayLabel();updateDelayInfo();}
+function onDelaySlide(){delayDays=parseInt(document.getElementById('delaySlider').value);document.querySelectorAll('.delay-pre').forEach(b=>{const m=b.getAttribute('onclick').match(/setDelay\((\d+)/);if(m)b.classList.toggle('active',parseInt(m[1])===delayDays);});updateDelayLabel();updateDelayInfo();}
+function updateDelayLabel(){const d=delayDays;document.getElementById('delayVal').textContent=d===0?"Auj.":d===1?'Demain':d<=3?d*24+'h':d+'j';}
+function updateDelayInfo(){
+  const d=delayDays,now=new Date(),end=new Date(now);end.setDate(now.getDate()+d);
+  const fmt=dt=>dt.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+  document.getElementById('delayInfo').textContent=d===0?'→ Aujourd\'hui uniquement':'→ Du '+fmt(now)+' au '+fmt(end)+' (jours ouvrés)';
+}
+function selectPeriod(p,btn){
+  selectedPeriod=p;document.querySelectorAll('.per-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
+  const mid=Math.round((PERIODS[p].start+PERIODS[p].end)/2);
+  approxHour=mid;document.getElementById('approxSlider').value=mid;document.getElementById('approxDisp').textContent=mid+'h00';
+  updateTimePrev();
+}
+function onApproxSlide(){approxHour=parseInt(document.getElementById('approxSlider').value);document.getElementById('approxDisp').textContent=approxHour+'h00';updateTimePrev();}
+function toggleApprox(){
+  approxActive=!approxActive;
+  document.getElementById('approxSlider').disabled=!approxActive;
+  document.getElementById('approxDisp').style.opacity=approxActive?'1':'0.3';
+  document.getElementById('approxToggle').textContent=approxActive?'✕':'↺';
+  document.querySelector('.tol-row').style.opacity=approxActive?'1':'0.3';
+  updateTimePrev();
+}
+function selectTol(btn){toleranceMin=parseInt(btn.dataset.t);document.querySelectorAll('.tol-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');updateTimePrev();}
+function updateTimePrev(){
+  const p=PERIODS[selectedPeriod];let ws=p.start*60,we=p.end*60;
+  if(approxActive){ws=Math.max(ws,approxHour*60-toleranceMin);we=Math.min(we,approxHour*60+toleranceMin);}
+  const f=m=>String(Math.floor(m/60)).padStart(2,'0')+'h'+String(m%60).padStart(2,'0');
+  document.getElementById('timePrev').textContent='→ Créneau : '+f(ws)+' – '+f(we)+' (hors fériés & week-ends)';
+}
+function getTimeWin(date){
+  const p=PERIODS[selectedPeriod];let ws=p.start*60,we=p.end*60;
+  if(approxActive){ws=Math.max(ws,approxHour*60-toleranceMin);we=Math.min(we,approxHour*60+toleranceMin);}
+  const now=new Date();
+  if(date.toDateString()===now.toDateString()){const nm=now.getHours()*60+now.getMinutes(),nr=Math.ceil(nm/15)*15;ws=Math.max(ws,nr,9*60);}
+  else{ws=Math.max(ws,9*60);}
+  if(ws>=we)return null;
+  const y=date.getFullYear(),mo=date.getMonth(),dy=date.getDate();
+  const base=new Date(y,mo,dy).getTime();
+  const ds=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(dy).padStart(2,'0');
+  return{dateStr:ds,date:new Date(date),start:base+ws*60000,end:base+we*60000};
+}
+function getDayWindows(){
+  const wins=[];
+  for(let i=0;i<=delayDays;i++){const d=new Date();d.setDate(d.getDate()+i);if(!isWorkDay(d))continue;const w=getTimeWin(d);if(w)wins.push(w);}
+  return wins;
+}
+
+// ══════════════════════════════════════════════════
+// TECHNICIANS
+// ══════════════════════════════════════════════════
+function renderTechTable(){
+  document.getElementById('techCount').textContent=technicians.length;
+  const tbody=document.getElementById('techTbody');
+  if(!technicians.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;font-size:11px;font-family:IBM Plex Mono,monospace;">Aucun technicien configuré.</td></tr>';return;}
+  tbody.innerHTML=technicians.map((t,i)=>
+    '<tr><td><div class="av" style="background:'+t.color+'">'+ini(t.name)+'</div>'+t.name+'</td>'
+    +'<td style="font-family:IBM Plex Mono,monospace;font-size:10px;color:var(--muted);">'+t.email+'</td>'
+    +'<td style="font-size:11px;color:'+(t.address?'var(--green)':'var(--orange)')+';">'+(t.address||'⚠')+'</td>'
+    +'<td>'+(t.service?'<span class="svc-tag">'+t.service+'</span>':'<span style="color:var(--muted)">—</span>')+'</td>'
+    +'<td style="font-size:11px;color:'+(t.agency?'var(--accent)':'var(--orange)')+';">'+(t.agency||'⚠ Manquante')+'</td>'
+    +'<td><button class="btn btn-danger" onclick="removeTech('+i+')">✕</button></td></tr>'
+  ).join('');
+}
+function removeTech(i){technicians.splice(i,1);saveTechs();renderTechTable();buildAgencyPills();}
+function clearAllTechs(){if(!confirm('Supprimer tous les techniciens ?'))return;technicians=[];saveTechs();renderTechTable();buildAgencyPills();}
+function saveTechs(){localStorage.setItem('dsp_techs',JSON.stringify(technicians));}
+function addManual(){
+  const name=document.getElementById('newName').value.trim();
+  const email=document.getElementById('newEmail').value.trim();
+  const address=document.getElementById('newAddress').value.trim();
+  const service=document.getElementById('newService').value.trim();
+  const agency=document.getElementById('newAgency').value.trim();
+  if(!name||!email)return cfgAlert('warn','Nom et email requis.');
+  technicians.push({id:Date.now()+'',name,email,address,service,agency,color:COLORS[technicians.length%COLORS.length]});
+  saveTechs();renderTechTable();buildAgencyPills();
+  ['newName','newEmail','newAddress','newAgency'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('newService').value='';
+  cfgAlert('ok',name+' ajouté.');
+}
+function parsePaste(text){
+  const rows=[];
+  for(const line of text.trim().split('\n')){
+    if(!line.trim())continue;
+    let cols=line.split('\t');if(cols.length<2)cols=line.split(';');
+    const name=(cols[0]||'').trim(),email=(cols[1]||'').trim(),address=(cols[2]||'').trim();
+    const service=(cols[3]||'').trim().toUpperCase(),agency=(cols[4]||'').trim();
+    if(!name||!email||!email.includes('@'))continue;
+    rows.push({name,email,address,service,agency});
+  }
+  return rows;
+}
+function previewPaste(){
+  const rows=parsePaste(document.getElementById('pasteArea').value);
+  document.getElementById('pastePreview').textContent=rows.length?'✓ '+rows.length+' ligne(s) : '+rows.slice(0,3).map(r=>r.name+(r.agency?' ('+r.agency+')':'')).join(', ')+(rows.length>3?'…':''):'';
+}
+function importPaste(){
+  const rows=parsePaste(document.getElementById('pasteArea').value);
+  if(!rows.length)return cfgAlert('warn','Aucune ligne valide.');
+  let added=0;
+  for(const r of rows){
+    const ex=technicians.find(t=>t.email.toLowerCase()===r.email.toLowerCase());
+    if(ex){ex.name=r.name;if(r.address)ex.address=r.address;if(r.service)ex.service=r.service;if(r.agency)ex.agency=r.agency;}
+    else{technicians.push({id:Date.now()+Math.random()+'',name:r.name,email:r.email,address:r.address,service:r.service,agency:r.agency,color:COLORS[technicians.length%COLORS.length]});added++;}
+  }
+  saveTechs();renderTechTable();buildAgencyPills();
+  document.getElementById('pasteArea').value='';document.getElementById('pastePreview').textContent='';
+  cfgAlert('ok',added+' ajouté(s), '+(rows.length-added)+' mis à jour.');
+}
+function saveGCPConfig(){
+  const sid=document.getElementById('cfgSheetId').value.trim();
+  if(sid){localStorage.setItem('dsp_sheetId',sid);}
+  cfgAlert('ok','ID Sheet enregistré.');
+}
+function saveSettings(){settings.margin=parseInt(document.getElementById('cfgMargin').value)||15;localStorage.setItem('dsp_settings',JSON.stringify(settings));cfgAlert('ok','Paramètres enregistrés.');}
+function cfgAlert(type,msg){const icons={warn:'⚠',err:'✕',ok:'✓'};document.getElementById('configAlert').innerHTML='<div class="alert alert-'+type+'" style="margin-top:0;">'+icons[type]+' '+msg+'</div>';setTimeout(()=>{document.getElementById('configAlert').innerHTML='';},3000);}
+
+// ══════════════════════════════════════════════════
+// GOOGLE AUTH
+// ══════════════════════════════════════════════════
+function loadGAPI(){if(!clientId||document.querySelector('script[src*="gsi"]'))return;const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=initGSI;document.head.appendChild(s);}
+let tokenClient;
+function initGSI(){
+  if(!window.google||!clientId)return;
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:clientId,
+    scope:'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets.readonly',
+    callback:resp=>{if(resp.error){setAuth(false);return;}gToken=resp.access_token;setAuth(true);}
+  });
+}
+function handleAuth(){if(!clientId){alert('Configurez d\'abord votre Client ID.');return;}if(gToken){gToken=null;setAuth(false);return;}if(!tokenClient){loadGAPI();setTimeout(handleAuth,1500);return;}tokenClient.requestAccessToken();}
+function setAuth(ok){
+  document.getElementById('authDot').className='dot'+(ok?' ok':'');
+  document.getElementById('authLabel').textContent=ok?'Connecté':'Non connecté';
+  document.getElementById('authBtn').textContent=ok?'Déconnecter':'Se connecter';
+  const lb=document.getElementById('loadSheetBtn');
+  if(lb)lb.disabled=!ok;
+}
+
+// ══════════════════════════════════════════════════
+// CALENDAR
+// ══════════════════════════════════════════════════
+function toRFC3339(dateStr,timeStr){const d=new Date(dateStr+'T'+timeStr);const off=-d.getTimezoneOffset();const sign=off>=0?'+':'-';const hh=String(Math.floor(Math.abs(off)/60)).padStart(2,'0');const mm=String(Math.abs(off)%60).padStart(2,'0');return dateStr+'T'+timeStr+':00'+sign+hh+':'+mm;}
+async function fetchEvents(calId,dateStr){
+  const p=new URLSearchParams({timeMin:toRFC3339(dateStr,'00:00'),timeMax:toRFC3339(dateStr,'23:59'),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
+  const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken}});
+  if(!r.ok){let d='';try{const j=await r.json();d=j?.error?.message||'';}catch(e){}throw new Error(r.status+(d?' : '+d:''));}
+  return (await r.json()).items||[];
+}
+function rawFreeSlots(events,wStart,wEnd,durMin,marginMin){
+  const minMs=durMin*60000;
+  const busy=events.filter(e=>e.start&&e.start.dateTime)
+    .map(e=>({s:new Date(e.start.dateTime).getTime(),e:new Date(e.end.dateTime).getTime()+marginMin*60000}))
+    .sort((a,b)=>a.s-b.s);
+  const slots=[];let cur=wStart;
+  for(const b of busy){if(cur+minMs<=b.s)slots.push({from:cur,to:b.s,nextTs:b.s});cur=Math.max(cur,b.e);}
+  if(cur+minMs<=wEnd)slots.push({from:cur,to:wEnd,nextTs:null});
+  return slots;
+}
+function getLastEvBefore(events,ts){
+  return events.filter(e=>e.start&&e.start.dateTime&&new Date(e.end.dateTime).getTime()<=ts)
+    .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime))[0]||null;
+}
+
+// ══════════════════════════════════════════════════
+// GEO — CP+ville uniquement, Nominatim throttlé
+// ══════════════════════════════════════════════════
+const gcache={};
+let _nomTs=0;
+
+// Extrait CP+Ville depuis n'importe quelle adresse
+// Ex: "27 AVENUE DU GENERAL DE GAULLE, 83320 CARQUEIRANNE, FRANCE" -> "83320 CARQUEIRANNE"
+// Ex: "83130 LA GARDE" -> "83130 LA GARDE"
+function extractCPV(addr){
+  if(!addr)return null;
+  const m=addr.match(/(\d{5})\s+([A-Za-z\u00C0-\u00FF][A-Za-z\u00C0-\u00FF\s\-]{0,40})(?:\s*,|\s*$)/);
+  if(m)return m[1]+' '+m[2].trim();
+  // Juste le CP si pas de ville trouvée
+  const cp=addr.match(/\d{5}/);
+  return cp?cp[0]:null;
+}
+
+// Geocode: TOUJOURS par CP+ville (simple, fiable, rapide)
+// Pour domicile/agence déjà formatés en "CP VILLE": direct
+async function geocode(addr){
+  if(!addr||addr.length<3)return null;
+
+  // Extraire CP+ville
+  const cpv=extractCPV(addr);
+  if(!cpv)return null;
+
+  // Cache par CP+ville (clé courte et stable)
+  if(gcache[cpv]!==undefined)return gcache[cpv];
+
+  // Throttle Nominatim
+  const wait=1200-(Date.now()-_nomTs);
+  if(wait>0)await sleep(wait);
+  _nomTs=Date.now();
+
+  try{
+    const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(cpv)+'&format=json&limit=1&countrycodes=fr';
+    const r=await fetch(url,{headers:{'Accept-Language':'fr','User-Agent':'Dispatch-JDC/8.2'}});
+    const d=await r.json();
+    if(d&&d.length){
+      const res={lat:+d[0].lat,lon:+d[0].lon,display:cpv,approx:true};
+      return gcache[cpv]=res;
+    }
+  }catch(e){}
+
+  gcache[cpv]=null;
+  return null;
+}
+
+// geocodeT = alias
+async function geocodeT(addr){return geocode(addr);}
+// ══════════════════════════════════════════════════
+// ORIGIN LOGIC
+// ══════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════
+// SLOT FINDER (avec contraintes trajet)
+// ══════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════
+// MAIN SEARCH
+// ══════════════════════════════════════════════════
+// Haversine (km) — instantané, pour comparer deux distances sans OSRM
+function haversine(a,b){
+  const R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLon=(b.lon-a.lon)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+// Distance instantanée (haversine) — utilisée pour le tri, zéro réseau
+const _osrmCache={};
+// OSRM réel — appel réseau, retourne distance et durée routières
+async function osrmReal(from,to){
+  try{
+    const url='https://router.project-osrm.org/route/v1/driving/'+from.lon+','+from.lat+';'+to.lon+','+to.lat+'?overview=false';
+    const r=await fetch(url);
+    const d=await r.json();
+    if(d.routes&&d.routes[0])return{dist:d.routes[0].distance,dur:d.routes[0].duration};
+  }catch(e){}
+  // Fallback haversine si OSRM indisponible
+  const km=haversine(from,to);
+  return{dist:km*1000,dur:km/50*3600};
+}
+
+async function osrmCached(from,to){
+  const key=from.lat.toFixed(3)+','+from.lon.toFixed(3)+'|'+to.lat.toFixed(3)+','+to.lon.toFixed(3);
+  if(_osrmCache[key])return _osrmCache[key];
+  // Haversine: instantané, pas de réseau
+  const km=haversine(from,to);
+  // Estimation durée: 50 km/h moyenne
+  const r={dist:km*1000, dur:km/50*3600, approx:true};
+  return _osrmCache[key]=r;
+}
+
+
+async function runSearch(){
+  const destText=document.getElementById('dest').value.trim();
+  const dur=parseInt(document.getElementById('duration').value);
+  document.getElementById('searchAlert').innerHTML='';
+  if(!gToken)return alert2('err',"Connectez-vous d'abord à Google Calendar.");
+  if(!destText)return alert2('warn','Saisissez une destination.');
+  if(!technicians.length)return alert2('warn','Aucun technicien configuré.');
+
+  const ra=document.getElementById('resultsArea');
+  ra.innerHTML='<div class="loading-card">'
+    +'<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Analyse en cours…</div>'
+    +'<div class="pbar-wrap"><div class="pbar" id="pbar" style="width:0"></div></div>'
+    +'<div style="font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;margin-top:7px;" id="plabel">Initialisation…</div>'
+    +'<div id="logBox" style="margin-top:14px;background:#1a1916;border-radius:8px;padding:12px;max-height:260px;overflow-y:auto;text-align:left;"></div>'
+    +'</div>';
+
+  // 1. Destination
+  let dc=destCoords;
+  if(!dc){
+    log('Géocodage destination…');
+    dc=await geocode(destText);
+    if(!dc){ra.innerHTML='';return alert2('err','Destination introuvable.');}
+    destCoords=dc;
+    log('Destination: '+dc.display.substring(0,50),'#4cde80');
+  }
+
+  // 2. Filtrage pool
+  let pool=selectedService==='ODM'?[...technicians]:technicians.filter(t=>(t.service||'').toUpperCase()===selectedService);
+  if(selectedAgency!=='ALL')pool=pool.filter(t=>(t.agency||'').trim()===selectedAgency);
+  if(!pool.length){ra.innerHTML='';return alert2('warn','Aucun technicien pour ce service / cette agence.');}
+  const wins=getDayWindows();
+  if(!wins.length){ra.innerHTML='';return alert2('warn','Aucun jour ouvré dans ce délai.');}
+  log(pool.length+' techniciens · '+wins.length+' jour(s)');
+
+  // 3. Précache domicile + agence (parallel par tech)
+  prog(5,'Positions techniciens…');
+  for(const t of pool){
+    await Promise.all([
+      t.address?geocode(t.address):Promise.resolve(null),
+      t.agency?geocode(t.agency):Promise.resolve(null)
+    ]);
+  }
+  log('Domiciles/agences géocodés','#4cde80');
+
+  // 4. Charger tous les agendas (séquentiel - Google Calendar rate-limit)
+  prog(10,'Chargement agendas…');
+  const errors=[];
+  const allEvts={}; // "email|dateStr" -> events[] | null
+  let calCount=0, calTotal=pool.length*wins.length;
+  for(const t of pool){
+    for(const win of wins){
+      const k=t.email+'|'+win.dateStr;
+      try{
+        allEvts[k]=await fetchEvents(t.email,win.dateStr);
+      }catch(e){
+        allEvts[k]=null;
+        if(!errors.find(x=>x.startsWith(t.name)))
+          errors.push(t.name+' : agenda inaccessible ('+e.message+')');
+      }
+      calCount++;
+      prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
+    }
+  }
+  log('Agendas chargés','#4cde80');
+
+  // 5. Collecter toutes les adresses RDV uniques et les géocoder
+  const rdvSet=new Set();
+  for(const evts of Object.values(allEvts)){
+    if(!evts)continue;
+    for(const e of evts){const loc=(e.location||'').trim();if(loc)rdvSet.add(loc);}
+  }
+  log('Géocodage '+rdvSet.size+' adresse(s) RDV…');
+  let gi=0;
+  for(const addr of rdvSet){
+    await geocode(addr);
+    gi++;
+    prog(35+Math.round((gi/rdvSet.size)*30),'Géo RDV '+gi+'/'+rdvSet.size);
+  }
+  log('Adresses RDV géocodées','#4cde80');
+
+  // 6. Analyse en mémoire (zéro réseau)
+  prog(65,'Analyse créneaux…');
+  const results=[];
+
+  for(let ti=0;ti<pool.length;ti++){
+    const t=pool[ti];
+    log('━━ '+t.name+' ('+(ti+1)+'/'+pool.length+')','#1a3aff');
+    prog(65+Math.round((ti/pool.length)*30),t.name+'…');
+
+    // Coords depuis cache (déjà géocodés)
+    // домicile et agence: extraire CP+ville pour lookup cache
+    const homeCPV=extractCPV(t.address||'');
+    const agCPV=extractCPV(t.agency||'');
+    const homeC=homeCPV?gcache[homeCPV]||null:null;
+    const agC=agCPV?gcache[agCPV]||null:null;
+
+    let best=null;
+    const techHasCalErr=errors.find(x=>x.startsWith(t.name));
+    if(techHasCalErr)continue;
+
+    for(const win of wins){
+      const evts=allEvts[t.email+'|'+win.dateStr];
+      if(!evts)continue;
+
+      const raw=rawFreeSlots(evts,win.start,win.end,dur,settings.margin);
+      if(!raw.length)continue;
+
+      for(const slot of raw){
+        const lastEv=getLastEvBefore(evts,slot.from);
+        let originC=null,originLbl='',prevRdv=null;
+
+        if(lastEv){
+          const loc=(lastEv.location||'').trim();
+          prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:false};
+          // Lecture cache — clé = adresse complète (stockée par geocode())
+          // Lecture cache par CP+ville
+          const locCPV=extractCPV(loc);
+          const lastC=locCPV?(gcache[locCPV]||null):null;
+          if(!lastC&&loc)prevRdv.geocodeFailed=true;
+          if(lastC){
+            // Toujours partir du dernier RDV (position réelle du tech)
+            originC=lastC;
+            originLbl='Dernier RDV'+(lastEv.summary?' : '+lastEv.summary.substring(0,20):'');
+          }else{
+            // RDV sans adresse ou non géocodé → agence
+            originC=agC||homeC;
+            originLbl=agC?t.agency+(loc?' (RDV sans adresse)':' (RDV sans adresse)'):'Domicile';
+          }
+        }else{
+          originC=homeC||agC;
+          originLbl=homeC?'Domicile':(t.agency||'');
+        }
+
+        if(!originC){log('  ✗ Pas de position pour '+t.name,'#f57f17');continue;}
+        log('  Origine: '+originLbl);
+
+        const travelTo=await osrmCached(originC,dc);
+        if(!travelTo)continue;
+
+        const arrival=slot.from+travelTo.dur*1000;
+        const endWork=arrival+dur*60000;
+        const deadline=slot.nextTs?slot.nextTs-settings.margin*60000:win.end;
+        if(endWork>deadline)continue;
+
+        log('  ✓ '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur),'#4cde80');
+        travelTo._from=originC; // store origin for OSRM enrichment
+        const cand={
+          t,
+          slot:{from:arrival,to:endWork,dep:slot.from,originLabel:originLbl,
+                approxAddr:false,travelTo,prevRdv},
+          win,travel:travelTo,originLbl
+        };
+        if(!best||travelTo.dist<best.travel.dist)best=cand;
+        break;
+      }
+    }
+    if(best)results.push(best);
+  }
+
+  // Trier par haversine
+  results.sort((a,b)=>{
+    const da=a.travel.dist,db=b.travel.dist;
+    if(Math.abs(da-db)>500)return da-db;
+    return a.win.date-b.win.date;
+  });
+  // Enrichir le top 10 avec vraies distances OSRM (routières)
+  prog(95,'Calcul distances routières…');
+  const top=results.slice(0,10);
+  for(const r of top){
+    if(r.slot&&r.slot.travelTo&&r.slot.travelTo._from){
+      try{const real=await osrmReal(r.slot.travelTo._from,dc);r.travel=real;r.slot.travelTo=real;}catch(e){}
+    }
+  }
+  // Re-trier avec vraies distances routières
+  top.sort((a,b)=>{
+    const da=a.travel.dist,db=b.travel.dist;
+    if(Math.abs(da-db)>500)return da-db;
+    return a.win.date-b.win.date;
+  });
+  prog(100,'Terminé');
+  log('Terminé — '+results.length+' résultat(s)','#4cde80');
+  renderResults(top.slice(0,5),results.length,errors,destText,dc,dur);
+}
+
+
+function prog(pct,lbl){
+  const pb=document.getElementById('pbar'),pl=document.getElementById('plabel');
+  if(pb)pb.style.width=pct+'%';
+  if(pl)pl.textContent=lbl;
+  log(lbl,'#4cde80');
+}
+function log(msg,color){
+  color=color||'#8a8680';
+  const box=document.getElementById('logBox');
+  if(!box)return;
+  const ts=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const line=document.createElement('div');
+  line.style.cssText='font-family:IBM Plex Mono,monospace;font-size:11px;color:'+color+';padding:2px 0;border-bottom:1px solid #2a2a2a;';
+  line.textContent='['+ts+'] '+msg;
+  box.appendChild(line);
+  box.scrollTop=box.scrollHeight;
+}
+function alert2(type,msg){const icons={warn:'⚠',err:'✕',ok:'✓'};document.getElementById('searchAlert').innerHTML='<div class="alert alert-'+type+'">'+icons[type]+' '+msg+'</div>';}
+
+// ══════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════
+function renderResults(res,total,errors,dest,dc,dur){
+  const ra=document.getElementById('resultsArea');
+  const svcLbl=selectedService==='ODM'?'Tous services':selectedService;
+  const agLbl=selectedAgency==='ALL'?'Toutes agences':selectedAgency;
+  const delLbl=delayDays===0?"Aujourd'hui":delayDays===1?'Demain':delayDays+'j';
+
+  let h='<div class="card" style="padding:14px 18px;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+    +'<div><span style="font-size:15px;font-weight:700;">Top '+res.length+' — <span style="color:var(--accent)">'+dest+'</span></span>'
+    +'<div style="font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;margin-top:2px;">'+delLbl+' · '+svcLbl+' · '+agLbl+' · '+dur+' min</div></div>'
+    +'<div style="display:flex;gap:5px;"><span class="dispo-badge dispo-ok">✓ '+res.length+'</span>'
+    +'<span class="dispo-badge" style="background:var(--red-light);color:var(--red);">✗ '+(total-res.length)+'</span></div></div>'
+    +'<div style="margin-top:6px;font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;">📍 '+dc.display.substring(0,80)
+    +' <a href="https://www.openstreetmap.org/?mlat='+dc.lat+'&mlon='+dc.lon+'&zoom=13" target="_blank" style="color:var(--accent);text-decoration:none;">Voir ↗</a></div></div>';
+
+  if(errors.length)h+='<div class="alert alert-warn">⚠ '+errors.length+' agenda(s) inaccessible(s) — exclus :<br><span style="font-family:IBM Plex Mono,monospace;font-size:11px;">'+errors.join('<br>')+'</span></div>';
+
+  if(!res.length){h+='<div class="empty-res"><div style="font-size:36px;margin-bottom:10px;">😔</div><p style="font-family:IBM Plex Mono,monospace;font-size:12px;">Aucun technicien disponible dans ce délai.</p></div>';ra.innerHTML=h;return;}
+
+  res.forEach((r,idx)=>{
+    const rc=idx===0?'r1':idx===1?'r2':idx===2?'r3':'rn';
+    const rl=idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':'#'+(idx+1);
+    const isToday=r.win.date.toDateString()===new Date().toDateString();
+    const dateLbl=isToday?"Aujourd'hui":fdate(r.win.date);
+    const tH=r.travel?'<div class="dist-val">'+fdist(r.travel.dist)+'</div><div class="dist-unit">'+fdur(r.travel.dur)+'</div><div class="dist-lbl">'+r.originLbl+'</div>':'<div style="color:var(--muted)">—</div>';
+
+    h+='<div class="result-card">'
+      +'<div class="rank '+rc+'">'+rl+'</div>'
+      +'<div style="min-width:0;">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+      +'<div style="width:34px;height:34px;border-radius:50%;background:'+r.t.color+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0;">'+ini(r.t.name)+'</div>'
+      +'<div><div class="result-name">'+r.t.name+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;">'+r.t.email+'</div></div>'
+      +'<span class="dispo-badge dispo-ok">✓ Disponible</span>'
+      +(r.t.service?'<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);font-family:IBM Plex Mono,monospace;">'+r.t.service+'</span>':'')
+      +(r.t.agency?'<span style="font-size:11px;padding:2px 7px;border-radius:4px;background:var(--accent-light);color:var(--accent);font-family:IBM Plex Mono,monospace;">'+r.t.agency+'</span>':'')
+      +'</div>'
+      +'<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;">'
+      +'<span class="day-badge">📅 '+dateLbl+'</span>'
+      +(r.slot.dep?'<span class="pill pill-dep">🚗 Départ '+ftime(r.slot.dep)+'</span>':'')
+      +'<span class="pill pill-free">🟢 Intervention '+ftime(r.slot.from)+' – '+ftime(Math.min(r.slot.to,r.win.end))+'</span>'
+      +'</div>'
+      +(()=>{
+        if(!r.slot.prevRdv)return '';
+        const pr=r.slot.prevRdv;
+        const failed=pr.geocodeFailed?' <span style="color:var(--orange);font-weight:700;">⚠ non géocodée</span>':'';
+        const fallback=r.slot.usedFallback?' <span style="color:var(--orange);font-size:10px;">(fallback agence)</span>':'';
+        return '<div style="margin-top:6px;padding:5px 8px;background:var(--surface2);border-radius:5px;border-left:3px solid '+(pr.geocodeFailed?'var(--orange)':'var(--border)')+';">'
+          +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">RDV précédent</span>'
+          +(pr.summary?'<span style="font-size:11px;font-weight:600;color:var(--text);margin-left:6px;">'+pr.summary.substring(0,30)+'</span>':'')+'<br>'
+          +'<span style="font-size:11px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';">'
+          +(pr.rawAddr||'<em>sans adresse</em>')+failed+fallback+'</span>'
+          +'</div>';
+      })()
+      +'<div style="margin-top:7px;"><a href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+dc.lat+','+dc.lon+'" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;font-family:IBM Plex Mono,monospace;">🧭 Itinéraire vers '+dest+' ↗</a></div>'
+      +'</div>'
+      +'<div class="result-meta">'+tH+'</div>'
+      +'</div>';
+  });
+
+  h+='<div style="text-align:center;font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;padding:5px 0;">OSRM · OpenStreetMap · Nominatim — 100% gratuit</div>';
+  ra.innerHTML=h;
+}
+
+init();
+</script>
+</body>
+</html>
