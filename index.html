@@ -166,7 +166,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.4</span>
+    <span class="app-ver">v9.5</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -538,31 +538,38 @@ function onDestInput(){
 }
 async function fetchAC(q){
   try{
-    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=8&countrycodes=fr&addressdetails=1',{headers:{'Accept-Language':'fr'}});
-    acSuggestions=await r.json();acIndex=-1;renderAC();
+    // api-adresse.data.gouv.fr : gère adresses complètes, accents, abréviations
+    const url='https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=8&autocomplete=1';
+    const r=await fetch(url);
+    const d=await r.json();
+    acSuggestions=d.features||[];
+    acIndex=-1;
+    renderAC();
   }catch(e){hideAC();}
 }
 function renderAC(){
   const list=document.getElementById('acList');
   if(!acSuggestions.length){hideAC();return;}
   list.innerHTML=acSuggestions.map((item,i)=>{
-    const a=item.address||{};
-    const main=a.city||a.town||a.village||a.municipality||item.display_name.split(',')[0];
-    const cp=a.postcode||'';
+    const p=item.properties||{};
+    const label=p.label||'';
+    const context=p.context||'';
+    const type=p.type||'';
+    // Icône selon type
+    const icon=type==='housenumber'||type==='street'?'📍':type==='municipality'?'🏙':type==='locality'?'📌':'🔍';
     return '<div class="ac-item" onmousedown="selectAC('+i+')">'
-      +'<div class="ac-main">'+main+(cp?' <span style="color:var(--muted);font-weight:400;">('+cp+')</span>':'')+'</div>'
-      +'<div class="ac-sub">'+item.display_name.substring(0,72)+'</div></div>';
+      +'<div class="ac-main">'+icon+' '+label+'</div>'
+      +'<div class="ac-sub">'+context+'</div></div>';
   }).join('');
   list.style.display='block';
 }
 function selectAC(i){
   const item=acSuggestions[i];if(!item)return;
-  const a=item.address||{};
-  const main=a.city||a.town||a.village||a.municipality||item.display_name.split(',')[0];
-  const cp=a.postcode||'';
-  document.getElementById('dest').value=cp?cp+' '+main:main;
-  destCoords={lat:+item.lat,lon:+item.lon,display:item.display_name};
-  document.getElementById('destConfirm').textContent='✓ '+item.display_name.substring(0,68);
+  const p=item.properties||{};
+  const coords=item.geometry&&item.geometry.coordinates;
+  document.getElementById('dest').value=p.label||'';
+  destCoords={lat:coords[1],lon:coords[0],display:p.label+' ('+p.context+')'};
+  document.getElementById('destConfirm').textContent='✓ '+p.label+(p.context?', '+p.context.split(',')[0]:'');
   hideAC();
 }
 function onDestKey(e){
@@ -874,6 +881,24 @@ async function osrmCached(from,to){
 }
 
 
+// Géocodage destination — utilise gouv.fr (adresses complètes) puis Nominatim
+async function geocodeDestination(q){
+  if(!q||q.length<2)return null;
+  // 1. api-adresse.data.gouv.fr
+  try{
+    const r=await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=1&autocomplete=0');
+    const d=await r.json();
+    if(d.features&&d.features.length>0){
+      const f=d.features[0];
+      const [lon,lat]=f.geometry.coordinates;
+      const p=f.properties;
+      return{lat,lon,display:p.label+(p.context?', '+p.context:'')};
+    }
+  }catch(e){}
+  // 2. Nominatim fallback
+  return await geocode(q);
+}
+
 async function runSearch(){
   const destText=document.getElementById('dest').value.trim();
   const dur=parseInt(document.getElementById('duration').value);
@@ -894,8 +919,9 @@ async function runSearch(){
   let dc=destCoords;
   if(!dc){
     log('Géocodage destination…');
-    dc=await geocode(destText);
-    if(!dc){ra.innerHTML='';return alert2('err','Destination introuvable.');}
+    // Essai gouv.fr d'abord (meilleur pour adresses complètes)
+    dc=await geocodeDestination(destText);
+    if(!dc){ra.innerHTML='';return alert2('err','Destination introuvable : '+destText+'.');}
     destCoords=dc;
     log('Destination: '+dc.display.substring(0,50),'#4cde80');
   }
