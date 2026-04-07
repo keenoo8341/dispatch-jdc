@@ -166,7 +166,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.3</span>
+    <span class="app-ver">v9.4</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -406,6 +406,21 @@ const ini=n=>n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
 // ══════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════
+// Normalise un service pour comparaison insensible accents/casse
+function normService(s){
+  return (s||'').toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'') // suppr accents
+    .replace(/[^A-Z0-9]/g,'');                        // garder alphanumériques
+}
+// Table de correspondance: bouton -> valeurs acceptées
+const SVC_MAP={
+  'ALL':null,
+  'CHR':['CHR'],
+  'KEZIA':['KEZIA'],
+  'SECU':['SECU','SECURITE','SÉCURITÉ','SECURITY'],
+  'TABAC':['TABAC']
+};
+
 // Mapping département → agence
 function deptToAgency(dept){
   const d=(dept||'').toString().trim();
@@ -890,7 +905,13 @@ async function runSearch(){
   if(selectedServices.has('ALL')){
     pool=[...technicians];
   }else{
-    pool=technicians.filter(t=>selectedServices.has((t.service||'').toUpperCase()));
+    pool=technicians.filter(t=>{
+      const ns=normService(t.service);
+      return [...selectedServices].some(svc=>{
+        const accepted=SVC_MAP[svc];
+        return accepted&&accepted.some(a=>normService(a)===ns||ns.startsWith(normService(a))||normService(a).startsWith(ns));
+      });
+    });
   }
   if(selectedAgency!=='ALL')pool=pool.filter(t=>(t.agency||'').trim()===selectedAgency);
   if(!pool.length){ra.innerHTML='';return alert2('warn','Aucun technicien pour ce service / cette agence.');}
