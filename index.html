@@ -157,7 +157,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.1</span>
+    <span class="app-ver">v9.2</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -284,21 +284,23 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 <!-- ═══════════ CONFIG ═══════════ -->
 <div class="page" id="page-config" style="display:none;">
   <div class="config-layout">
+
+    <!-- Colonne gauche -->
     <div style="display:flex;flex-direction:column;gap:14px;">
       <div class="card">
-        <div class="card-title">🔑 Google Calendar API</div>
+        <div class="card-title">🔑 Google Calendar</div>
         <div class="card-sub">Connexion pré-configurée</div>
         <div class="alert alert-info">Cliquez sur "Se connecter" dans la barre du haut pour autoriser l'accès à Google Calendar et Google Sheets.</div>
       </div>
-        </div>
-        <div class="alert alert-info" style="margin-bottom:10px;">Origines JS autorisées = URL exacte d'ouverture du fichier.</div>
-        
-        <div class="field" style="margin-top:14px;">
-          <label>ID Google Sheet techniciens</label>
+      <div class="card">
+        <div class="card-title">📋 Google Sheet techniciens</div>
+        <div class="card-sub">Import automatique depuis la BDD</div>
+        <div class="field">
+          <label>ID du Sheet</label>
           <input type="text" id="cfgSheetId" placeholder="1aOtAtBAcuH2DDno-wLYaAlu0bY_ddENhXXZVdHBCZR0" />
-          <div class="field-hint">URL du Sheet : /d/<b>XXXX</b>/edit — copier la partie XXXX</div>
+          <div class="field-hint">URL du Sheet : /d/<b>XXXX</b>/edit — copier XXXX</div>
         </div>
-        <button class="btn btn-secondary btn-sm" id="loadSheetBtn" onclick="loadSheet()" disabled>📥 Charger depuis Google Sheet</button>
+        <button class="btn btn-primary btn-sm" id="loadSheetBtn" onclick="loadSheet()" disabled>📥 Charger les techniciens</button>
         <div id="sheetStatus" style="font-size:11px;margin-top:6px;font-family:IBM Plex Mono,monospace;color:var(--muted);"></div>
       </div>
       <div class="card">
@@ -313,6 +315,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
       </div>
     </div>
 
+    <!-- Colonne droite — Techniciens -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <div class="card-title">👷 Techniciens <span class="badge badge-info" id="techCount">0</span></div>
@@ -361,7 +364,6 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
         <button class="btn btn-primary btn-sm" onclick="addManual()">Ajouter</button>
       </div>
       <div id="configAlert" style="margin-top:10px;"></div>
-    </div>
   </div>
 </div>
 
