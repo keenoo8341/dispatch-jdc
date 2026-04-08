@@ -166,7 +166,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.5</span>
+    <span class="app-ver">v9.6</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -959,8 +959,33 @@ async function runSearch(){
   prog(10,'Chargement agendas…');
   const errors=[];
   const allEvts={}; // "email|dateStr" -> events[] | null
-  let calCount=0, calTotal=pool.length*wins.length;
+
+  // Préparer les dates à charger: jours de la fenêtre + les 2 jours ouvrés précédents
+  // (pour trouver le dernier RDV avant le premier créneau)
+  const extraDates=new Set();
+  if(wins.length>0){
+    // Remonter jusqu'à 5 jours calendaires pour trouver 2 jours ouvrés
+    for(let d=1;d<=7;d++){
+      const prevD=new Date(wins[0].date);
+      prevD.setDate(wins[0].date.getDate()-d);
+      const ds=prevD.getFullYear()+'-'+String(prevD.getMonth()+1).padStart(2,'0')+'-'+String(prevD.getDate()).padStart(2,'0');
+      extraDates.add(ds);
+      if(extraDates.size>=2)break;
+    }
+  }
+
+  let calCount=0;
+  const calDates=[...extraDates,...wins.map(w=>w.dateStr)];
+  const calTotal=pool.length*calDates.length;
+
   for(const t of pool){
+    // Charger les jours précédents (silencieux, pas d'erreur si indispo)
+    for(const ds of extraDates){
+      const k=t.email+'|'+ds;
+      try{allEvts[k]=await fetchEvents(t.email,ds);}catch(e){allEvts[k]=[];}
+      calCount++;prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
+    }
+    // Charger les jours de la fenêtre (avec gestion d'erreur)
     for(const win of wins){
       const k=t.email+'|'+win.dateStr;
       try{
@@ -1019,7 +1044,24 @@ async function runSearch(){
       if(!raw.length)continue;
 
       for(const slot of raw){
-        const lastEv=getLastEvBefore(evts,slot.from);
+        // Chercher le dernier RDV avant ce slot, y compris la veille
+        let lastEv=getLastEvBefore(evts,slot.from);
+        if(!lastEv){
+          // Pas de RDV ce jour avant le slot → chercher la veille et les jours précédents
+          const winDate=win.date;
+          for(let daysBack=1;daysBack<=5;daysBack++){
+            const prevDate=new Date(winDate);
+            prevDate.setDate(winDate.getDate()-daysBack);
+            const prevDateStr=prevDate.getFullYear()+'-'+String(prevDate.getMonth()+1).padStart(2,'0')+'-'+String(prevDate.getDate()).padStart(2,'0');
+            const prevEvts=allEvts[t.email+'|'+prevDateStr];
+            if(prevEvts&&prevEvts.length){
+              // Prendre le dernier RDV de ce jour précédent (terminé n'importe quand)
+              const candidates=prevEvts.filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime)
+                .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
+              if(candidates.length){lastEv=candidates[0];break;}
+            }
+          }
+        }
         let originC=null,originLbl='',prevRdv=null;
 
         if(lastEv){
