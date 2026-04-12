@@ -166,7 +166,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.6</span>
+    <span class="app-ver">v9.7</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -760,6 +760,8 @@ function setAuth(ok){
   document.getElementById('authBtn').textContent=ok?'Déconnecter':'Se connecter';
   const lb=document.getElementById('loadSheetBtn');
   if(lb)lb.disabled=!ok;
+  // Import automatique du Sheet à chaque connexion
+  if(ok) loadSheet();
 }
 
 // ══════════════════════════════════════════════════
@@ -1044,19 +1046,43 @@ async function runSearch(){
       if(!raw.length)continue;
 
       for(const slot of raw){
-        // Chercher le dernier RDV avant ce slot, y compris la veille
+        // Chercher le meilleur RDV d'origine pour ce slot
+        // Priorité : 1) dernier RDV terminé avant le slot ce jour
+        //            2) RDV le plus proche géo ce jour (même après le slot)
+        //            3) dernier RDV des jours précédents
         let lastEv=getLastEvBefore(evts,slot.from);
+
         if(!lastEv){
-          // Pas de RDV ce jour avant le slot → chercher la veille et les jours précédents
+          // Chercher le RDV le plus proche géo parmi ceux du jour (avant OU après)
+          // → logique "le tech passe dans le coin"
+          const todayEvts=evts.filter(e=>e.start&&e.start.dateTime&&(e.location||'').trim());
+          if(todayEvts.length>0&&dc){
+            // Trouver celui dont l'adresse est la plus proche de la destination
+            let bestEv=null,bestDist=Infinity;
+            for(const ev of todayEvts){
+              const loc=(ev.location||'').trim();
+              const cpv=extractCPV(loc);
+              const evC=cpv?gcache[cpv]||null:null;
+              if(evC){
+                const d=haversine(evC,dc);
+                if(d<bestDist){bestDist=d;bestEv=ev;}
+              }
+            }
+            if(bestEv)lastEv=bestEv;
+          }
+        }
+
+        if(!lastEv){
+          // Pas de RDV ce jour → chercher les jours précédents (jusqu'à 5j)
           const winDate=win.date;
           for(let daysBack=1;daysBack<=5;daysBack++){
             const prevDate=new Date(winDate);
             prevDate.setDate(winDate.getDate()-daysBack);
-            const prevDateStr=prevDate.getFullYear()+'-'+String(prevDate.getMonth()+1).padStart(2,'0')+'-'+String(prevDate.getDate()).padStart(2,'0');
-            const prevEvts=allEvts[t.email+'|'+prevDateStr];
+            const prevDs=prevDate.getFullYear()+'-'+String(prevDate.getMonth()+1).padStart(2,'0')+'-'+String(prevDate.getDate()).padStart(2,'0');
+            const prevEvts=allEvts[t.email+'|'+prevDs];
             if(prevEvts&&prevEvts.length){
-              // Prendre le dernier RDV de ce jour précédent (terminé n'importe quand)
-              const candidates=prevEvts.filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime)
+              const candidates=prevEvts
+                .filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime)
                 .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
               if(candidates.length){lastEv=candidates[0];break;}
             }
@@ -1066,7 +1092,10 @@ async function runSearch(){
 
         if(lastEv){
           const loc=(lastEv.location||'').trim();
-          prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:false};
+          const locCPV2=extractCPV(loc);
+          const evC2=locCPV2?gcache[locCPV2]||null:null;
+          const evDist=evC2?haversine(evC2,dc):null;
+          prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:false,evDist};
           // Lecture cache — clé = adresse complète (stockée par geocode())
           // Lecture cache par CP+ville
           const locCPV=extractCPV(loc);
@@ -1120,7 +1149,7 @@ async function runSearch(){
   });
   // Enrichir le top 10 avec vraies distances OSRM (routières)
   prog(95,'Calcul distances routières…');
-  const top=results.slice(0,10);
+  const top=results.slice(0,15); // top 15 pour OSRM, on affiche top 10
   for(const r of top){
     if(r.slot&&r.slot.travelTo&&r.slot.travelTo._from){
       try{const real=await osrmReal(r.slot.travelTo._from,dc);r.travel=real;r.slot.travelTo=real;}catch(e){}
@@ -1134,7 +1163,7 @@ async function runSearch(){
   });
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
-  renderResults(top.slice(0,5),results.length,errors,destText,dc,dur);
+  renderResults(top.slice(0,10),results.length,errors,destText,dc,dur);
 }
 
 
@@ -1181,7 +1210,7 @@ function renderResults(res,total,errors,dest,dc,dur){
 
   res.forEach((r,idx)=>{
     const rc=idx===0?'r1':idx===1?'r2':idx===2?'r3':'rn';
-    const rl=idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':'#'+(idx+1);
+    const rl=idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':'<span style="font-size:13px;font-weight:800;">#'+(idx+1)+'</span>';
     const isToday=r.win.date.toDateString()===new Date().toDateString();
     const dateLbl=isToday?"Aujourd'hui":fdate(r.win.date);
     const tH=r.travel?'<div class="dist-val">'+fdist(r.travel.dist)+'</div><div class="dist-unit">'+fdur(r.travel.dur)+'</div><div class="dist-lbl">'+r.originLbl+'</div>':'<div style="color:var(--muted)">—</div>';
@@ -1211,7 +1240,7 @@ function renderResults(res,total,errors,dest,dc,dur){
           +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">RDV précédent</span>'
           +(pr.summary?'<span style="font-size:11px;font-weight:600;color:var(--text);margin-left:6px;">'+pr.summary.substring(0,30)+'</span>':'')+'<br>'
           +'<span style="font-size:11px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';">'
-          +(pr.rawAddr||'<em>sans adresse</em>')+failed+fallback+'</span>'
+          +(pr.rawAddr||'<em>sans adresse</em>')+failed+fallback+(pr.evDist!=null?'<span style="color:var(--accent);margin-left:6px;">📍 '+pr.evDist.toFixed(1)+'km de la dest.</span>':'')+'</span>'
           +'</div>';
       })()
       +'<div style="margin-top:7px;"><a href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+dc.lat+','+dc.lon+'" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;font-family:IBM Plex Mono,monospace;">🧭 Itinéraire vers '+dest+' ↗</a></div>'
