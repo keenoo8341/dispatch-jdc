@@ -32,11 +32,14 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 #page-dispatch{padding:0;height:calc(100vh - 52px);overflow:hidden;}
 .dispatch-layout{height:100%;padding:16px;}
 .dispatch-col-left{overflow-y:auto;height:100%;padding-right:8px;position:relative;}
-.dispatch-col-right{overflow-y:auto;height:100%;padding-bottom:16px;}
+.dispatch-col-right{overflow-y:auto;height:100%;padding-bottom:24px;display:block;}
+.dispatch-col-right .results-area{display:flex;flex-direction:column;gap:8px;min-height:min-content;}
+.result-card{min-height:unset;height:auto;}
 @media(max-width:768px){
   #page-dispatch{height:auto;overflow:visible;}
   .dispatch-layout{height:auto;}
-  .dispatch-col-left,.dispatch-col-right{overflow:visible;height:auto;padding:0;}
+  .dispatch-col-left{overflow:visible;height:auto;padding:0;}
+  .dispatch-col-right{overflow:visible;height:auto;padding:0;}
 }
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;box-shadow:var(--shadow);}
 .card-title{font-size:14px;font-weight:700;margin-bottom:3px;}
@@ -170,7 +173,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.9</span>
+    <span class="app-ver">v10.0</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -276,11 +279,13 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
       </div>
     </div>
 
-    <div class="dispatch-col-right results-area" id="resultsArea">
+    <div class="dispatch-col-right" id="resultsArea">
+    <div class="results-area">
       <div class="empty-res">
         <div style="font-size:44px;margin-bottom:10px;">👥</div>
         <p style="font-family:'IBM Plex Mono',monospace;font-size:12px;">Saisissez une destination et lancez la recherche.</p>
       </div>
+    </div>
     </div>
   </div>
 </div>
@@ -918,12 +923,12 @@ async function runSearch(){
   if(!technicians.length)return alert2('warn','Aucun technicien configuré.');
 
   const ra=document.getElementById('resultsArea');
-  ra.innerHTML='<div class="loading-card">'
+  ra.innerHTML='<div class="results-area"><div class="loading-card">'
     +'<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Analyse en cours…</div>'
     +'<div class="pbar-wrap"><div class="pbar" id="pbar" style="width:0"></div></div>'
     +'<div style="font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;margin-top:7px;" id="plabel">Initialisation…</div>'
     +'<div id="logBox" style="margin-top:14px;background:#1a1916;border-radius:8px;padding:12px;max-height:260px;overflow-y:auto;text-align:left;"></div>'
-    +'</div>';
+    +'</div></div>';
 
   // 1. Destination
   let dc=destCoords;
@@ -1262,7 +1267,7 @@ function renderResults(res,total,errors,dest,dc,dur){
   });
 
   h+='<div style="text-align:center;font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;padding:5px 0;">OSRM · OpenStreetMap · Nominatim — 100% gratuit</div>';
-  ra.innerHTML=h;
+  ra.innerHTML='<div class="results-area">'+h+'</div>';
 }
 
 init();
