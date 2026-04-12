@@ -23,6 +23,10 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .btn-primary{background:var(--accent);color:#fff;}.btn-primary:hover{background:#0c28e0;}.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
 .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
 .btn-danger{background:var(--red-light);color:var(--red);border:1px solid #f5c0c0;font-size:12px;padding:4px 8px;}
+.btn-search{background:#22c55e;color:#fff;font-size:13px;font-weight:700;padding:7px 16px;border-radius:8px;white-space:nowrap;}
+.btn-search:hover{background:#16a34a;}
+.btn-search:disabled{opacity:.4;cursor:not-allowed;}
+@media(max-width:768px){.btn-search span{display:none;}.btn-search::before{content:'⚡';}}
 .btn-sm{padding:5px 10px;font-size:12px;}
 .page{display:none;}.page.active{display:block;}
 #page-dispatch{padding:0;height:calc(100vh - 52px);overflow:hidden;}
@@ -113,13 +117,13 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .tol-btn.active{background:var(--accent-light);border-color:var(--accent);color:var(--accent);font-weight:600;}
 .time-prev{margin-top:8px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:6px 10px;}
 /* Results */
-.results-area{display:flex;flex-direction:column;gap:12px;}
-.result-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;box-shadow:var(--shadow);display:grid;grid-template-columns:44px 1fr auto;gap:14px;align-items:center;transition:all .15s;position:relative;overflow:hidden;}
+.results-area{display:flex;flex-direction:column;gap:8px;}
+.result-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;box-shadow:var(--shadow);display:grid;grid-template-columns:40px 1fr auto;gap:10px;align-items:start;transition:all .15s;position:relative;overflow:hidden;}
 .result-card:hover{border-color:var(--accent);box-shadow:0 4px 20px rgba(26,58,255,.08);}
 .result-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green);}
-.rank{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0;}
+.rank{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;margin-top:2px;}
 .r1{background:#ffd700;color:#7a5c00;}.r2{background:#e0e0e0;color:#555;}.r3{background:#e8c9a0;color:#7a4a00;}.rn{background:var(--surface2);color:var(--muted);}
-.result-name{font-size:14px;font-weight:700;}
+.result-name{font-size:13px;font-weight:700;}
 .pill{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 8px;border-radius:4px;display:inline-block;}
 .pill-free{background:var(--green-light);color:var(--green);}
 .pill-dep{background:#fff3cd;color:#856404;}
@@ -127,8 +131,8 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .dispo-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;}
 .dispo-ok{background:var(--green-light);color:var(--green);}
 .day-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#fff3cd;color:#856404;border:1px solid #ffc107;font-family:'IBM Plex Mono',monospace;}
-.result-meta{text-align:right;flex-shrink:0;min-width:90px;}
-.dist-val{font-size:19px;font-weight:800;color:var(--accent);}
+.result-meta{text-align:right;flex-shrink:0;min-width:80px;}
+.dist-val{font-size:16px;font-weight:800;color:var(--accent);}
 .dist-unit{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
 .dist-lbl{font-size:10px;color:var(--muted);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
 .empty-res{text-align:center;padding:50px 20px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:12px;}
@@ -166,13 +170,16 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.7</span>
+    <span class="app-ver">v9.8</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
     <button class="nav-tab" onclick="showPage('config',this)">⚙️ Configuration</button>
   </div>
-  <div style="display:flex;align-items:center;gap:8px;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button class="btn btn-search" id="searchTopBtn" onclick="runSearch()" title="Lancer la recherche">
+      ⚡ Rechercher
+    </button>
     <div class="auth-status"><div class="dot" id="authDot"></div><span id="authLabel" style="white-space:nowrap;">Non connecté</span></div>
     <button class="btn btn-primary btn-sm" id="authBtn" onclick="handleAuth()" style="white-space:nowrap;">Se connecter</button>
   </div>
@@ -260,10 +267,6 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
         </div>
         <div class="time-prev" id="timePrev"></div>
       </div>
-
-      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;font-size:14px;" onclick="runSearch()">
-        ⚡ Trouver le meilleur technicien
-      </button>
 
       <div id="searchAlert"></div>
     </div>
@@ -1236,11 +1239,15 @@ function renderResults(res,total,errors,dest,dc,dur){
         const pr=r.slot.prevRdv;
         const failed=pr.geocodeFailed?' <span style="color:var(--orange);font-weight:700;">⚠ non géocodée</span>':'';
         const fallback=r.slot.usedFallback?' <span style="color:var(--orange);font-size:10px;">(fallback agence)</span>':'';
-        return '<div style="margin-top:6px;padding:5px 8px;background:var(--surface2);border-radius:5px;border-left:3px solid '+(pr.geocodeFailed?'var(--orange)':'var(--border)')+';">'
-          +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">RDV précédent</span>'
-          +(pr.summary?'<span style="font-size:11px;font-weight:600;color:var(--text);margin-left:6px;">'+pr.summary.substring(0,30)+'</span>':'')+'<br>'
-          +'<span style="font-size:11px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';">'
-          +(pr.rawAddr||'<em>sans adresse</em>')+failed+fallback+(pr.evDist!=null?'<span style="color:var(--accent);margin-left:6px;">📍 '+pr.evDist.toFixed(1)+'km de la dest.</span>':'')+'</span>'
+        const addrShort=(pr.rawAddr||'').length>60?pr.rawAddr.substring(0,58)+'…':(pr.rawAddr||'<em>sans adresse</em>');
+        return '<div style="margin-top:5px;padding:4px 8px;background:var(--surface2);border-radius:5px;border-left:3px solid '+(pr.geocodeFailed?'var(--orange)':'var(--border)')+';">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">'
+          +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">RDV préc.</span>'
+          +(pr.summary?'<span style="font-size:11px;font-weight:600;color:var(--text);flex:1;margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+pr.summary.substring(0,25)+'</span>':'')
+          +(pr.evDist!=null?'<span style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;margin-left:4px;">📍'+pr.evDist.toFixed(1)+'km</span>':'')
+          +'</div>'
+          +'<div style="font-size:10px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(pr.rawAddr||'')+'">'
+          +addrShort+failed+fallback+'</div>'
           +'</div>';
       })()
       +'<div style="margin-top:7px;"><a href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+dc.lat+','+dc.lon+'" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;font-family:IBM Plex Mono,monospace;">🧭 Itinéraire vers '+dest+' ↗</a></div>'
