@@ -31,7 +31,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .page{display:none;}.page.active{display:block;}
 #page-dispatch{padding:0;height:calc(100vh - 52px);overflow:hidden;}
 .dispatch-layout{height:100%;padding:16px;}
-.dispatch-col-left{overflow-y:auto;height:100%;padding-right:8px;padding-bottom:16px;}
+.dispatch-col-left{overflow-y:auto;height:100%;padding-right:8px;position:relative;}
 .dispatch-col-right{overflow-y:auto;height:100%;padding-bottom:16px;}
 @media(max-width:768px){
   #page-dispatch{height:auto;overflow:visible;}
@@ -170,17 +170,14 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v9.8</span>
+    <span class="app-ver">v9.9</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
     <button class="nav-tab" onclick="showPage('config',this)">⚙️ Configuration</button>
   </div>
   <div style="display:flex;align-items:center;gap:10px;">
-    <button class="btn btn-search" id="searchTopBtn" onclick="runSearch()" title="Lancer la recherche">
-      ⚡ Rechercher
-    </button>
-    <div class="auth-status"><div class="dot" id="authDot"></div><span id="authLabel" style="white-space:nowrap;">Non connecté</span></div>
+<div class="auth-status"><div class="dot" id="authDot"></div><span id="authLabel" style="white-space:nowrap;">Non connecté</span></div>
     <button class="btn btn-primary btn-sm" id="authBtn" onclick="handleAuth()" style="white-space:nowrap;">Se connecter</button>
   </div>
 </div>
@@ -188,7 +185,8 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 <!-- ═══════════ DISPATCH ═══════════ -->
 <div class="page active" id="page-dispatch" style="display:block;">
   <div class="dispatch-layout">
-    <div class="dispatch-col-left" style="display:flex;flex-direction:column;gap:12px;">
+    <div class="dispatch-col-left" style="display:flex;flex-direction:column;gap:0;padding-bottom:0;">
+      <div style="display:flex;flex-direction:column;gap:12px;padding-bottom:76px;" id="formFields">
 
       <!-- Destination -->
       <div class="card">
@@ -268,7 +266,14 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
         <div class="time-prev" id="timePrev"></div>
       </div>
 
-      <div id="searchAlert"></div>
+        <div id="searchAlert"></div>
+      </div>
+      <!-- Bouton sticky en bas de la colonne gauche -->
+      <div style="position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding:12px 0 8px;margin-top:-20px;">
+        <button class="btn btn-search" style="width:100%;justify-content:center;padding:13px;font-size:15px;border-radius:10px;box-shadow:0 4px 16px rgba(34,197,94,.4);" onclick="runSearch()">
+          ⚡ Trouver le meilleur technicien
+        </button>
+      </div>
     </div>
 
     <div class="dispatch-col-right results-area" id="resultsArea">
