@@ -50,7 +50,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .field input:focus,.field select:focus{border-color:var(--accent);background:#fff;}
 .field-hint{font-size:11px;color:var(--muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}
 /* Layout — responsive */
-.dispatch-layout{display:grid;grid-template-columns:280px minmax(0,1fr) minmax(300px,420px);gap:10px;max-width:1700px;}
+.dispatch-layout{display:grid;grid-template-columns:250px minmax(0,380px) 1fr;gap:10px;max-width:1800px;}
 .dispatch-col-map{height:100%;min-height:300px;}
 /* MOBILE */
 @media(max-width:768px){
@@ -79,7 +79,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 }
 /* TABLETTE */
 @media(max-width:1024px) and (min-width:769px){
-  .dispatch-layout{grid-template-columns:280px 1fr;}
+  .dispatch-layout{grid-template-columns:240px 1fr;}
   .dispatch-col-map{display:none;}
   .config-layout{grid-template-columns:1fr!important;}
 }
@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v10.4</span>
+    <span class="app-ver">v10.5</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1279,15 +1279,14 @@ function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
   if(!_map)return;
   const cols=['#1a3aff','#0d7a3e','#c45c00','#8b1a8b','#c41a1a','#00838f','#5d4037','#2e7d32','#1565c0','#6a1b9a'];
   const col=cols[rank%cols.length];
-  const medal=rank===0?'🥇':rank===1?'🥈':rank===2?'🥉':'';
+  // Initiales du tech (2 lettres max)
+  const ini2=tech.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
   const icon=L.divIcon({
     className:'',
-    html:'<div style="background:'+col+';color:#fff;width:34px;height:34px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:'+(rank<3?'15':'11')+'px;font-weight:800;">'+
-      (rank<3?medal:'#'+(rank+1))+'</div>',
-    iconSize:[34,34],iconAnchor:[17,17]
+    html:'<div style="background:'+col+';color:#fff;width:36px;height:36px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:-0.5px;">'+ini2+'</div>',
+    iconSize:[36,36],iconAnchor:[18,18]
   });
   const m=L.marker([lat,lon],{icon}).addTo(_map);
-  const ini2=tech.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
   m.bindPopup(
     '<div class="map-popup">'
     +'<strong>'+(medal||'#'+(rank+1))+' '+tech.name+'</strong>'
@@ -1320,12 +1319,14 @@ function updateMap(dc,results){
     const label=(dc.display||'').substring(0,60);
     addDestMarker(dc.lat,dc.lon,label);
     const bounds=[[dc.lat,dc.lon]];
-    results.forEach((r,i)=>{
+    let markerIdx=0;
+    results.forEach((r)=>{
       const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.slot&&r.slot.originCoords);
-      if(!orig||!orig.lat||!orig.lon)return;
+      if(!orig||!orig.lat||!orig.lon){markerIdx++;return;}
       const slotLbl=fdate(r.win.date)+' '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
-      addTechMarker(orig.lat,orig.lon,r.t,i,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
+      addTechMarker(orig.lat,orig.lon,r.t,markerIdx,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
       bounds.push([orig.lat,orig.lon]);
+      markerIdx++;
     });
     if(bounds.length>1)_map.fitBounds(bounds,{padding:[40,40],maxZoom:13});
     setTimeout(()=>_map&&_map.invalidateSize(),300);
