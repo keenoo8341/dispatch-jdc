@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v10.5</span>
+    <span class="app-ver">v10.6</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1101,11 +1101,12 @@ async function runSearch(){
     prog(65+Math.round((ti/pool.length)*30),t.name+'…');
 
     // Coords depuis cache (déjà géocodés)
-    // домicile et agence: extraire CP+ville pour lookup cache
     const homeCPV=extractCPV(t.address||'');
     const agCPV=extractCPV(t.agency||'');
     const homeC=homeCPV?gcache[homeCPV]||null:null;
     const agC=agCPV?gcache[agCPV]||null:null;
+    // Stocker sur le tech pour la carte
+    t._homeCoords=homeC||agC;
 
     let best=null;
     const techHasCalErr=errors.find(x=>x.startsWith(t.name));
@@ -1319,16 +1320,26 @@ function updateMap(dc,results){
     const label=(dc.display||'').substring(0,60);
     addDestMarker(dc.lat,dc.lon,label);
     const bounds=[[dc.lat,dc.lon]];
+    console.log('[MAP] dc=',dc.lat,dc.lon,'results=',results.length);
     let markerIdx=0;
-    results.forEach((r)=>{
-      const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.slot&&r.slot.originCoords);
-      if(!orig||!orig.lat||!orig.lon){markerIdx++;return;}
-      const slotLbl=fdate(r.win.date)+' '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
+    results.forEach((r,i)=>{
+      const origCheck=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.slot&&r.slot.originCoords)||(r.t&&r.t._homeCoords);
+      console.log('[MAP] tech',i,r.t.name,'orig=',origCheck?origCheck.lat+','+origCheck.lon:'NULL');
+      // Utiliser originCoords (position du tech) OU coords du domicile en fallback
+      const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)
+               ||(r.slot&&r.slot.originCoords)
+               ||(r.t&&r.t._homeCoords);
+      if(!orig||!orig.lat||!orig.lon){
+        // Pas de coords → placer quand même à la destination avec une note
+        markerIdx++; return;
+      }
+      const slotLbl=fdate(r.win.date)+' · '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
       addTechMarker(orig.lat,orig.lon,r.t,markerIdx,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
       bounds.push([orig.lat,orig.lon]);
       markerIdx++;
     });
-    if(bounds.length>1)_map.fitBounds(bounds,{padding:[40,40],maxZoom:13});
+    if(bounds.length>1)_map.fitBounds(bounds,{padding:[50,50],maxZoom:12});
+    else _map.setView([dc.lat,dc.lon],12);
     setTimeout(()=>_map&&_map.invalidateSize(),300);
   }catch(e){console.error('Map error:',e);}
 }
