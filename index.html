@@ -33,7 +33,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .dispatch-layout{height:100%;padding:16px;}
 .dispatch-col-left{overflow-y:auto;height:100%;padding-right:8px;position:relative;}
 .dispatch-col-right{overflow-y:auto;height:100%;padding-bottom:24px;display:block;}
-.dispatch-col-right .results-area{display:flex;flex-direction:column;gap:8px;min-height:min-content;}
+.dispatch-col-right .results-area{display:flex;flex-direction:column;gap:5px;min-height:min-content;}
 .result-card{min-height:unset;height:auto;}
 @media(max-width:768px){
   #page-dispatch{height:auto;overflow:visible;}
@@ -50,7 +50,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .field input:focus,.field select:focus{border-color:var(--accent);background:#fff;}
 .field-hint{font-size:11px;color:var(--muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}
 /* Layout — responsive */
-.dispatch-layout{display:grid;grid-template-columns:320px 1fr 340px;gap:12px;max-width:1600px;}
+.dispatch-layout{display:grid;grid-template-columns:280px minmax(0,1fr) minmax(300px,420px);gap:10px;max-width:1700px;}
 .dispatch-col-map{height:100%;min-height:300px;}
 /* MOBILE */
 @media(max-width:768px){
@@ -127,10 +127,10 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .time-prev{margin-top:8px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:6px 10px;}
 /* Results */
 .results-area{display:flex;flex-direction:column;gap:8px;}
-.result-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;box-shadow:var(--shadow);display:grid;grid-template-columns:40px 1fr auto;gap:10px;align-items:start;transition:all .15s;position:relative;overflow:hidden;}
+.result-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;box-shadow:var(--shadow);display:grid;grid-template-columns:32px 1fr;gap:8px;align-items:start;transition:all .15s;position:relative;overflow:hidden;cursor:pointer;}
 .result-card:hover{border-color:var(--accent);box-shadow:0 4px 20px rgba(26,58,255,.08);}
 .result-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green);}
-.rank{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;margin-top:2px;}
+.rank{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:2px;}
 .r1{background:#ffd700;color:#7a5c00;}.r2{background:#e0e0e0;color:#555;}.r3{background:#e8c9a0;color:#7a4a00;}.rn{background:var(--surface2);color:var(--muted);}
 .result-name{font-size:13px;font-weight:700;}
 .pill{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 8px;border-radius:4px;display:inline-block;}
@@ -175,7 +175,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-#mapPanel{height:100%;min-height:300px;border-radius:10px;overflow:hidden;border:1px solid var(--border);position:relative;}
+#mapPanel{height:100%;min-height:400px;border-radius:10px;overflow:hidden;border:1px solid var(--border);position:relative;}
 .leaflet-container{font-family:'Familjen Grotesk',sans-serif!important;}
 .map-popup{font-size:12px;line-height:1.5;}
 .map-popup strong{font-size:13px;display:block;}
@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v10.3</span>
+    <span class="app-ver">v10.4</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1204,7 +1204,7 @@ async function runSearch(){
         const cand={
           t,
           slot:{from:arrival,to:endWork,dep:slot.from,originLabel:originLbl,
-                approxAddr:false,travelTo,prevRdv},
+                approxAddr:false,travelTo,prevRdv,originCoords:originC},
           win,travel:travelTo,originLbl
         };
         if(!best||travelTo.dist<best.travel.dist)best=cand;
@@ -1225,7 +1225,7 @@ async function runSearch(){
   const top=results.slice(0,15); // top 15 pour OSRM, on affiche top 10
   for(const r of top){
     if(r.slot&&r.slot.travelTo&&r.slot.travelTo._from){
-      try{const real=await osrmReal(r.slot.travelTo._from,dc);r.travel=real;r.slot.travelTo=real;}catch(e){}
+      try{const orig=r.slot.travelTo._from;const real=await osrmReal(orig,dc);real._from=orig;r.travel=real;r.slot.travelTo=real;}catch(e){}
     }
   }
   // Re-trier avec vraies distances routières
@@ -1300,6 +1300,17 @@ function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
   _markers.push(m);
 }
 
+function highlightTech(idx,coords){
+  if(!_map||!coords.lat||!coords.lon)return;
+  _map.setView([coords.lat,coords.lon],13,{animate:true});
+  // Highlight la card
+  document.querySelectorAll('.result-card').forEach((el,i)=>{
+    el.style.outline=i===idx?'2px solid var(--accent)':'none';
+  });
+  // Ouvrir le popup du marker
+  if(_markers[idx+1])_markers[idx+1].openPopup();
+}
+
 function updateMap(dc,results){
   if(!dc)return;
   if(typeof L==='undefined'){console.warn('Leaflet non chargé');return;}
@@ -1310,7 +1321,7 @@ function updateMap(dc,results){
     addDestMarker(dc.lat,dc.lon,label);
     const bounds=[[dc.lat,dc.lon]];
     results.forEach((r,i)=>{
-      const orig=r.slot&&r.slot.travelTo&&r.slot.travelTo._from;
+      const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.slot&&r.slot.originCoords);
       if(!orig||!orig.lat||!orig.lon)return;
       const slotLbl=fdate(r.win.date)+' '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
       addTechMarker(orig.lat,orig.lon,r.t,i,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
@@ -1392,7 +1403,8 @@ function renderResults(res,total,errors,dest,dc,dur){
         +'</div>';
     })();
 
-    h+='<div class="result-card">'
+    const cardId='card-'+idx;
+    h+='<div class="result-card" id="'+cardId+'" onclick="highlightTech('+idx+','+JSON.stringify({lat:r.slot.originCoords?r.slot.originCoords.lat:null,lon:r.slot.originCoords?r.slot.originCoords.lon:null}).replace(/"/g,\'&quot;\')+')">'
       // Rang
       +'<div class="rank '+rc+'">'+rl+'</div>'
       // Contenu
