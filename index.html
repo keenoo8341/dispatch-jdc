@@ -1300,9 +1300,9 @@ function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
   _markers.push(m);
 }
 
-function highlightTech(idx,coords){
-  if(!_map||!coords.lat||!coords.lon)return;
-  _map.setView([coords.lat,coords.lon],13,{animate:true});
+function highlightTech(idx,lat,lon){
+  if(!_map||!lat||!lon)return;
+  _map.setView([lat,lon],13,{animate:true});
   // Highlight la card
   document.querySelectorAll('.result-card').forEach((el,i)=>{
     el.style.outline=i===idx?'2px solid var(--accent)':'none';
