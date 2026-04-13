@@ -1403,8 +1403,9 @@ function renderResults(res,total,errors,dest,dc,dur){
         +'</div>';
     })();
 
-    const cardId='card-'+idx;
-    h+='<div class="result-card" id="'+cardId+'" onclick="highlightTech('+idx+','+JSON.stringify({lat:r.slot.originCoords?r.slot.originCoords.lat:null,lon:r.slot.originCoords?r.slot.originCoords.lon:null}).replace(/"/g,\'&quot;\')+')">'
+    const _lat=r.slot.originCoords?r.slot.originCoords.lat:null;
+    const _lon=r.slot.originCoords?r.slot.originCoords.lon:null;
+    h+='<div class="result-card" onclick="highlightTech('+idx+','+_lat+','+_lon+')">'
       // Rang
       +'<div class="rank '+rc+'">'+rl+'</div>'
       // Contenu
