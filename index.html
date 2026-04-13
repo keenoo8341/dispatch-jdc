@@ -50,7 +50,8 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .field input:focus,.field select:focus{border-color:var(--accent);background:#fff;}
 .field-hint{font-size:11px;color:var(--muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}
 /* Layout — responsive */
-.dispatch-layout{display:grid;grid-template-columns:360px 1fr;gap:16px;max-width:1280px;}
+.dispatch-layout{display:grid;grid-template-columns:320px 1fr 340px;gap:12px;max-width:1600px;}
+.dispatch-col-map{height:100%;min-height:300px;}
 /* MOBILE */
 @media(max-width:768px){
   .topbar{padding:0 12px;height:48px;}
@@ -59,6 +60,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   .nav-tab{padding:5px 10px;font-size:12px;}
   .page{padding:12px;}
   .dispatch-layout{grid-template-columns:1fr;gap:12px;}
+  .dispatch-col-map{height:300px;}
   .config-layout{grid-template-columns:1fr!important;}
   .svc-row{grid-template-columns:repeat(5,1fr);}
   .agency-pills{gap:4px;}
@@ -77,7 +79,8 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 }
 /* TABLETTE */
 @media(max-width:1024px) and (min-width:769px){
-  .dispatch-layout{grid-template-columns:320px 1fr;}
+  .dispatch-layout{grid-template-columns:280px 1fr;}
+  .dispatch-col-map{display:none;}
   .config-layout{grid-template-columns:1fr!important;}
 }
 /* Autocomplete */
@@ -169,6 +172,16 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .mi:focus{border-color:var(--accent);background:#fff;}
 ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+#mapPanel{height:100%;min-height:300px;border-radius:10px;overflow:hidden;border:1px solid var(--border);position:relative;}
+.leaflet-container{font-family:'Familjen Grotesk',sans-serif!important;}
+.map-popup{font-size:12px;line-height:1.5;}
+.map-popup strong{font-size:13px;display:block;}
+.map-popup .dist{color:var(--accent);font-weight:700;}
+.map-placeholder{display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:10px;color:var(--muted);background:var(--surface);border-radius:10px;border:1px solid var(--border);}
+</style>
 </head>
 <body>
 
@@ -176,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v10.1</span>
+    <span class="app-ver">v10.3</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -289,6 +302,14 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
         <p style="font-family:'IBM Plex Mono',monospace;font-size:12px;">Saisissez une destination et lancez la recherche.</p>
       </div>
     </div>
+    </div>
+    <div class="dispatch-col-map">
+      <div id="mapPanel">
+        <div class="map-placeholder">
+          <div style="font-size:36px;">🗺</div>
+          <p style="font-size:12px;font-family:IBM Plex Mono,monospace;">La carte s'affichera après la recherche</p>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -766,7 +787,33 @@ function initGSI(){
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:clientId,
     scope:'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets.readonly',
-    callback:resp=>{if(resp.error){setAuth(false);return;}gToken=resp.access_token;setAuth(true);}
+    callback:resp=>{
+      if(resp.error){setAuth(false);return;}
+      gToken=resp.access_token;
+      setAuth(true);
+      // Planifier le refresh avant expiration (token dure ~1h, refresh à 55min)
+      clearTimeout(window._tokenRefreshTimer);
+      window._tokenRefreshTimer=setTimeout(()=>{
+        console.log('[AUTH] Token refresh automatique...');
+        tokenClient.requestAccessToken({prompt:''});
+      }, 55*60*1000);
+    }
+  });
+}
+
+// Refresh silencieux si erreur 401 détectée
+async function refreshToken(){
+  return new Promise((resolve)=>{
+    if(!tokenClient){resolve(false);return;}
+    const prev=tokenClient.callback;
+    tokenClient.callback=(resp)=>{
+      tokenClient.callback=prev;
+      if(resp.error){resolve(false);return;}
+      gToken=resp.access_token;
+      setAuth(true);
+      resolve(true);
+    };
+    tokenClient.requestAccessToken({prompt:''});
   });
 }
 function handleAuth(){if(!clientId){alert('Configurez d\'abord votre Client ID.');return;}if(gToken){gToken=null;setAuth(false);return;}if(!tokenClient){loadGAPI();setTimeout(handleAuth,1500);return;}tokenClient.requestAccessToken();}
@@ -786,7 +833,15 @@ function setAuth(ok){
 function toRFC3339(dateStr,timeStr){const d=new Date(dateStr+'T'+timeStr);const off=-d.getTimezoneOffset();const sign=off>=0?'+':'-';const hh=String(Math.floor(Math.abs(off)/60)).padStart(2,'0');const mm=String(Math.abs(off)%60).padStart(2,'0');return dateStr+'T'+timeStr+':00'+sign+hh+':'+mm;}
 async function fetchEvents(calId,dateStr){
   const p=new URLSearchParams({timeMin:toRFC3339(dateStr,'00:00'),timeMax:toRFC3339(dateStr,'23:59'),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
-  const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken}});
+  const doFetch=async()=>fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken}});
+  let r=await doFetch();
+  // Token expiré → refresh silencieux et retry
+  if(r.status===401){
+    console.log('[AUTH] 401 détecté, refresh token...');
+    const ok=await refreshToken();
+    if(ok){r=await doFetch();}
+    else{throw new Error('Session expirée — veuillez vous reconnecter.');}
+  }
   if(!r.ok){let d='';try{const j=await r.json();d=j?.error?.message||'';}catch(e){}throw new Error(r.status+(d?' : '+d:''));}
   return (await r.json()).items||[];
 }
@@ -1010,8 +1065,10 @@ async function runSearch(){
         allEvts[k]=await fetchEvents(t.email,win.dateStr);
       }catch(e){
         allEvts[k]=null;
-        if(!errors.find(x=>x.startsWith(t.name)))
-          errors.push(t.name+' : agenda inaccessible ('+e.message+')');
+        const msg=e.message.includes('expirée')||e.message.includes('401')
+          ?t.name+' : session expirée (reconnexion en cours…)'
+          :t.name+' : agenda inaccessible ('+e.message+')';
+        if(!errors.find(x=>x.startsWith(t.name)))errors.push(msg);
       }
       calCount++;
       prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
@@ -1179,7 +1236,89 @@ async function runSearch(){
   });
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
-  renderResults(top.slice(0,10),results.length,errors,destText,dc,dur);
+  const topDisplay=top.slice(0,10);
+  renderResults(topDisplay,results.length,errors,destText,dc,dur);
+  updateMap(dc,topDisplay);
+}
+
+// ══════════════════════════════════════════════════
+// CARTE LEAFLET
+// ══════════════════════════════════════════════════
+let _map=null,_markers=[];
+
+function initMap(lat,lon){
+  const panel=document.getElementById('mapPanel');
+  if(!panel)return;
+  if(!_map){
+    panel.innerHTML='<div id="leafletMap" style="height:100%;min-height:300px;"></div>';
+    _map=L.map('leafletMap',{zoomControl:true,attributionControl:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(_map);
+    L.control.attribution({prefix:'© <a href="https://osm.org">OpenStreetMap</a>'}).addTo(_map);
+  }
+  _map.setView([lat,lon],11);
+}
+
+function clearMapMarkers(){
+  _markers.forEach(m=>{try{_map.removeLayer(m);}catch(e){}});
+  _markers=[];
+}
+
+function addDestMarker(lat,lon,label){
+  if(!_map)return;
+  const icon=L.divIcon({
+    className:'',
+    html:'<div style="background:#c41a1a;width:22px;height:22px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);"></div>',
+    iconSize:[22,22],iconAnchor:[11,11]
+  });
+  const m=L.marker([lat,lon],{icon,zIndexOffset:1000}).addTo(_map);
+  m.bindPopup('<div class="map-popup"><strong>📍 Destination</strong><div style="font-size:10px;color:#666;">'+label+'</div></div>',{maxWidth:200}).openPopup();
+  _markers.push(m);
+}
+
+function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
+  if(!_map)return;
+  const cols=['#1a3aff','#0d7a3e','#c45c00','#8b1a8b','#c41a1a','#00838f','#5d4037','#2e7d32','#1565c0','#6a1b9a'];
+  const col=cols[rank%cols.length];
+  const medal=rank===0?'🥇':rank===1?'🥈':rank===2?'🥉':'';
+  const icon=L.divIcon({
+    className:'',
+    html:'<div style="background:'+col+';color:#fff;width:34px;height:34px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:'+(rank<3?'15':'11')+'px;font-weight:800;">'+
+      (rank<3?medal:'#'+(rank+1))+'</div>',
+    iconSize:[34,34],iconAnchor:[17,17]
+  });
+  const m=L.marker([lat,lon],{icon}).addTo(_map);
+  const ini2=tech.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+  m.bindPopup(
+    '<div class="map-popup">'
+    +'<strong>'+(medal||'#'+(rank+1))+' '+tech.name+'</strong>'
+    +(tech.service?'<span style="font-size:10px;color:#888;"> · '+tech.service+'</span>':'')
+    +'<div class="dist">'+distLabel+'</div>'
+    +'<div style="font-size:10px;color:#888;">Depuis : '+originLbl+'</div>'
+    +'<div style="font-size:10px;color:#333;">'+slotLabel+'</div>'
+    +'</div>',{maxWidth:230}
+  );
+  _markers.push(m);
+}
+
+function updateMap(dc,results){
+  if(!dc)return;
+  if(typeof L==='undefined'){console.warn('Leaflet non chargé');return;}
+  try{
+    initMap(dc.lat,dc.lon);
+    clearMapMarkers();
+    const label=(dc.display||'').substring(0,60);
+    addDestMarker(dc.lat,dc.lon,label);
+    const bounds=[[dc.lat,dc.lon]];
+    results.forEach((r,i)=>{
+      const orig=r.slot&&r.slot.travelTo&&r.slot.travelTo._from;
+      if(!orig||!orig.lat||!orig.lon)return;
+      const slotLbl=fdate(r.win.date)+' '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
+      addTechMarker(orig.lat,orig.lon,r.t,i,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
+      bounds.push([orig.lat,orig.lon]);
+    });
+    if(bounds.length>1)_map.fitBounds(bounds,{padding:[40,40],maxZoom:13});
+    setTimeout(()=>_map&&_map.invalidateSize(),300);
+  }catch(e){console.error('Map error:',e);}
 }
 
 
