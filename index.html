@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.0</span>
+    <span class="app-ver">v11.1</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1005,10 +1005,14 @@ async function runSearch(){
   // 2. Filtrage pool
   let pool;
   if(selectedServices.has('ALL')){
+    // Tous les services sélectionnés → tous les techs
     pool=[...technicians];
   }else{
+    // Filtre strict par service sélectionné
     pool=technicians.filter(t=>{
       const ns=normService(t.service);
+      // Un tech sans service peut faire n'importe quelle intervention
+      if(!t.service||!t.service.trim())return true;
       return [...selectedServices].some(svc=>{
         const accepted=SVC_MAP[svc];
         return accepted&&accepted.some(a=>normService(a)===ns||ns.startsWith(normService(a))||normService(a).startsWith(ns));
@@ -1111,10 +1115,10 @@ async function runSearch(){
     // Stocker sur le tech pour la carte
     t._homeCoords=homeC||agC;
 
-    let best=null;
     const techHasCalErr=errors.find(x=>x.startsWith(t.name));
     if(techHasCalErr)continue;
 
+    // Parcourir TOUS les jours et TOUS les créneaux (pas de break)
     for(const win of wins){
       const evts=allEvts[t.email+'|'+win.dateStr];
       if(!evts)continue;
@@ -1193,18 +1197,16 @@ async function runSearch(){
         if(endWork>deadline)continue;
 
         log('  ✓ '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur),'#4cde80');
-        travelTo._from=originC; // store origin for OSRM enrichment
-        const cand={
+        travelTo._from=originC;
+        results.push({
           t,
           slot:{from:arrival,to:endWork,dep:slot.from,originLabel:originLbl,
                 approxAddr:false,travelTo,prevRdv,originCoords:originC},
           win,travel:travelTo,originLbl
-        };
-        if(!best||travelTo.dist<best.travel.dist)best=cand;
-        break;
+        });
+        break; // un seul créneau par jour par tech (le premier disponible)
       }
     }
-    if(best)results.push(best);
   }
 
   // Trier par haversine
@@ -1215,7 +1217,7 @@ async function runSearch(){
   });
   // Enrichir le top 10 avec vraies distances OSRM (routières)
   prog(95,'Calcul distances routières…');
-  const top=results.slice(0,15); // top 15 pour OSRM, on affiche top 10
+  const top=results.slice(0,20); // top 20 pour OSRM enrichment
   for(const r of top){
     if(r.slot&&r.slot.travelTo&&r.slot.travelTo._from){
       try{const orig=r.slot.travelTo._from;const real=await osrmReal(orig,dc);real._from=orig;r.travel=real;r.slot.travelTo=real;}catch(e){}
