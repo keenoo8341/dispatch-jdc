@@ -571,7 +571,7 @@ function onDestInput(){
   destCoords=null;
   document.getElementById('destConfirm').textContent='';
   // Réinitialiser la carte quand la destination change
-  if(_map){clearMapMarkers();document.getElementById('mapPanel').innerHTML='<div class="map-placeholder"><div style="font-size:36px;">🗺</div><p style="font-size:12px;font-family:IBM Plex Mono,monospace;">La carte s'affichera après la recherche</p></div>';}
+  if(_map){clearMapMarkers();document.getElementById('mapPanel').innerHTML='<div class="map-placeholder"><div style="font-size:36px;">🗺</div><p style="font-size:12px;font-family:IBM Plex Mono,monospace;">La carte s'affichera apres la recherche</p></div>';}
   const q=document.getElementById('dest').value.trim();
   if(q.length<2){hideAC();return;}
   clearTimeout(acTimer);acTimer=setTimeout(()=>fetchAC(q),350);
