@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.4</span>
+    <span class="app-ver">v11.5</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -426,6 +426,7 @@ function isWorkDay(date){
 // STATE
 // ══════════════════════════════════════════════════
 let gToken=null,technicians=[],settings={margin:15};
+let _logHistory=[];
 let clientId='',selectedServices=new Set(['ALL']),selectedAgency='ALL',selectedPeriod='allday';
 let approxActive=false,approxHour=13,toleranceMin=270,delayDays=2;
 let destCoords=null,acSuggestions=[],acIndex=-1,acTimer=null;
@@ -981,6 +982,7 @@ async function runSearch(){
   const destText=document.getElementById('dest').value.trim();
   const dur=parseInt(document.getElementById('duration').value);
   document.getElementById('searchAlert').innerHTML='';
+  _logHistory=[];
   if(!gToken)return alert2('err',"Connectez-vous d'abord à Google Calendar.");
   if(!destText)return alert2('warn','Saisissez une destination.');
   if(!technicians.length)return alert2('warn','Aucun technicien configuré.');
@@ -1243,9 +1245,18 @@ async function runSearch(){
   });
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
-  const topDisplay=top.slice(0,10);
+  const topDisplay=top.slice(0,15);
   renderResults(topDisplay,results.length,errors,destText,dc,dur);
   updateMap(dc,topDisplay);
+  // Bouton logs après résultats
+  setTimeout(()=>{
+    const ra=document.getElementById('resultsArea');
+    if(!ra)return;
+    const lb=document.createElement('div');
+    lb.style.cssText='text-align:center;padding:6px;';
+    lb.innerHTML='<button class="btn btn-secondary btn-sm" onclick="showLogs()" style="font-size:10px;">📋 Voir les logs ('+_logHistory.length+')</button>';
+    ra.appendChild(lb);
+  },200);
 }
 
 // ══════════════════════════════════════════════════
@@ -1352,6 +1363,16 @@ function updateMap(dc,results){
 }
 
 
+function showLogs(){
+  const ra=document.getElementById('resultsArea');
+  const box=document.createElement('div');
+  box.style.cssText='background:#1a1916;border-radius:8px;padding:12px;margin:8px;max-height:400px;overflow-y:auto;';
+  box.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#4cde80;font-family:IBM Plex Mono,monospace;font-size:11px;font-weight:700;">LOGS ('+_logHistory.length+')</span><button onclick="this.closest('div').parentElement.remove()" style="background:none;border:none;color:#888;cursor:pointer;font-size:14px;">✕</button></div>'
+    +_logHistory.map(l=>'<div style="font-family:IBM Plex Mono,monospace;font-size:11px;color:'+l.color+';padding:2px 0;border-bottom:1px solid #2a2a2a;">['+l.ts+'] '+l.msg+'</div>').join('');
+  ra.appendChild(box);
+  box.scrollTop=box.scrollHeight;
+}
+
 function prog(pct,lbl){
   const pb=document.getElementById('pbar'),pl=document.getElementById('plabel');
   if(pb)pb.style.width=pct+'%';
@@ -1360,9 +1381,10 @@ function prog(pct,lbl){
 }
 function log(msg,color){
   color=color||'#8a8680';
+  const ts=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  _logHistory.push({msg,color,ts});
   const box=document.getElementById('logBox');
   if(!box)return;
-  const ts=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const line=document.createElement('div');
   line.style.cssText='font-family:IBM Plex Mono,monospace;font-size:11px;color:'+color+';padding:2px 0;border-bottom:1px solid #2a2a2a;';
   line.textContent='['+ts+'] '+msg;
