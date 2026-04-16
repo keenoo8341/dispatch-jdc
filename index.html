@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.3</span>
+    <span class="app-ver">v11.4</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -849,9 +849,9 @@ async function fetchEvents(calId,dateStr){
 }
 function rawFreeSlots(events,wStart,wEnd,durMin,marginMin){
   const minMs=durMin*60000;
-  const now=Date.now();
-  // Pour les créneaux d'aujourd'hui, ne pas proposer un créneau déjà passé
-  const effectiveStart=Math.max(wStart,now);
+  // effectiveStart = wStart toujours (on cherche tous les créneaux du calendrier)
+  // Les créneaux passés sont déjà occupés dans Google Calendar
+  const effectiveStart=wStart;
   const busy=events.filter(e=>e.start&&e.start.dateTime)
     .map(e=>({s:new Date(e.start.dateTime).getTime(),e:new Date(e.end.dateTime).getTime()+marginMin*60000}))
     .sort((a,b)=>a.s-b.s);
