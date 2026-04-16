@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.5</span>
+    <span class="app-ver">v11.6</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1365,12 +1365,30 @@ function updateMap(dc,results){
 
 function showLogs(){
   const ra=document.getElementById('resultsArea');
-  const box=document.createElement('div');
-  box.style.cssText='background:#1a1916;border-radius:8px;padding:12px;margin:8px;max-height:400px;overflow-y:auto;';
-  box.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#4cde80;font-family:IBM Plex Mono,monospace;font-size:11px;font-weight:700;">LOGS ('+_logHistory.length+')</span><button onclick="this.closest('div').parentElement.remove()" style="background:none;border:none;color:#888;cursor:pointer;font-size:14px;">✕</button></div>'
-    +_logHistory.map(l=>'<div style="font-family:IBM Plex Mono,monospace;font-size:11px;color:'+l.color+';padding:2px 0;border-bottom:1px solid #2a2a2a;">['+l.ts+'] '+l.msg+'</div>').join('');
-  ra.appendChild(box);
-  box.scrollTop=box.scrollHeight;
+  const wrap=document.createElement('div');
+  wrap.style.cssText='background:#1a1916;border-radius:8px;padding:12px;margin:8px;max-height:400px;overflow-y:auto;position:relative;';
+  // Header
+  const hdr=document.createElement('div');
+  hdr.style.cssText='display:flex;justify-content:space-between;margin-bottom:8px;';
+  const title=document.createElement('span');
+  title.style.cssText='color:#4cde80;font-family:IBM Plex Mono,monospace;font-size:11px;font-weight:700;';
+  title.textContent='LOGS ('+_logHistory.length+' lignes)';
+  const closeBtn=document.createElement('button');
+  closeBtn.textContent='✕';
+  closeBtn.style.cssText='background:none;border:none;color:#888;cursor:pointer;font-size:14px;';
+  closeBtn.onclick=function(){wrap.remove();};
+  hdr.appendChild(title);
+  hdr.appendChild(closeBtn);
+  wrap.appendChild(hdr);
+  // Log lines
+  _logHistory.forEach(function(l){
+    const line=document.createElement('div');
+    line.style.cssText='font-family:IBM Plex Mono,monospace;font-size:10px;color:'+l.color+';padding:2px 0;border-bottom:1px solid #2a2a2a;white-space:pre-wrap;word-break:break-all;';
+    line.textContent='['+l.ts+'] '+l.msg;
+    wrap.appendChild(line);
+  });
+  ra.appendChild(wrap);
+  wrap.scrollTop=wrap.scrollHeight;
 }
 
 function prog(pct,lbl){
