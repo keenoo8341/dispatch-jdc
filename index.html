@@ -130,7 +130,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .result-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;box-shadow:var(--shadow);display:grid;grid-template-columns:32px 1fr;gap:8px;align-items:start;transition:all .15s;position:relative;overflow:hidden;cursor:pointer;}
 .result-card:hover{border-color:var(--accent);box-shadow:0 4px 20px rgba(26,58,255,.08);}
 .result-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green);}
-.rank{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:2px;}
+.rank{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;margin-top:2px;}
 .r1{background:#ffd700;color:#7a5c00;}.r2{background:#e0e0e0;color:#555;}.r3{background:#e8c9a0;color:#7a4a00;}.rn{background:var(--surface2);color:var(--muted);}
 .result-name{font-size:13px;font-weight:700;}
 .pill{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 8px;border-radius:4px;display:inline-block;}
@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.7</span>
+    <span class="app-ver">v11.8</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -426,6 +426,7 @@ function isWorkDay(date){
 // STATE
 // ══════════════════════════════════════════════════
 let gToken=null,technicians=[],settings={margin:15};
+let _lastResults=null,_lastDc=null;
 let _logHistory=[];
 let clientId='',selectedServices=new Set(['ALL']),selectedAgency='ALL',selectedPeriod='allday';
 let approxActive=false,approxHour=13,toleranceMin=270,delayDays=2;
@@ -1243,7 +1244,8 @@ async function runSearch(){
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
   const topDisplay=top.slice(0,15);
   renderResults(topDisplay,results.length,errors,destText,dc,dur);
-  updateMap(dc,topDisplay);
+  _lastResults=topDisplay;_lastDc=dc;
+  updateMap(dc,topDisplay,0); // montrer le #1 par défaut
   // Bouton logs après résultats
   setTimeout(()=>{
     const ra=document.getElementById('resultsArea');
@@ -1289,16 +1291,18 @@ function addDestMarker(lat,lon,label){
   _markers.push(m);
 }
 
-function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
+function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel,highlighted){
   if(!_map)return;
   const cols=['#1a3aff','#0d7a3e','#c45c00','#8b1a8b','#c41a1a','#00838f','#5d4037','#2e7d32','#1565c0','#6a1b9a'];
   const col=cols[rank%cols.length];
-  // Initiales du tech (2 lettres max)
   const ini2=tech.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+  const sz=highlighted?44:36;
+  const border=highlighted?'3px solid #FFD700':'2px solid #fff';
+  const shadow=highlighted?'0 2px 12px rgba(255,215,0,.6)':'0 2px 8px rgba(0,0,0,.35)';
   const icon=L.divIcon({
     className:'',
-    html:'<div style="background:'+col+';color:#fff;width:36px;height:36px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:-0.5px;">'+ini2+'</div>',
-    iconSize:[36,36],iconAnchor:[18,18]
+    html:'<div style="background:'+col+';color:#fff;width:'+sz+'px;height:'+sz+'px;border-radius:50%;border:'+border+';box-shadow:'+shadow+';display:flex;align-items:center;justify-content:center;font-size:'+(highlighted?13:11)+'px;font-weight:800;letter-spacing:-0.5px;">'+ini2+'</div>',
+    iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
   });
   const jitter=rank*0.0008;
   const m=L.marker([lat+jitter,lon+jitter],{icon}).addTo(_map);
@@ -1314,18 +1318,21 @@ function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
   _markers.push(m);
 }
 
+let _highlightedIdx=null;
 function highlightTech(idx,lat,lon){
-  if(!_map||!lat||!lon)return;
-  _map.setView([lat,lon],13,{animate:true});
+  _highlightedIdx=idx;
   // Highlight la card
   document.querySelectorAll('.result-card').forEach((el,i)=>{
     el.style.outline=i===idx?'2px solid var(--accent)':'none';
   });
-  // Ouvrir le popup du marker
-  if(_markers[idx+1])_markers[idx+1].openPopup();
+  // Reconstruire les markers avec le nouveau sélectionné
+  if(_map&&_lastResults&&_lastDc){
+    updateMap(_lastDc,_lastResults,idx);
+    if(lat&&lon)_map.setView([lat,lon],13,{animate:true});
+  }
 }
 
-function updateMap(dc,results){
+function updateMap(dc,results,highlightedIdx){
   if(!dc)return;
   if(typeof L==='undefined'){console.warn('Leaflet non chargé');return;}
   try{
@@ -1336,20 +1343,18 @@ function updateMap(dc,results){
     const bounds=[[dc.lat,dc.lon]];
     console.log('[MAP] dc=',dc.lat,dc.lon,'results=',results.length);
     let markerIdx=0;
-    results.forEach((r,i)=>{
-      const origCheck=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.slot&&r.slot.originCoords)||(r.t&&r.t._homeCoords);
-      console.log('[MAP] tech',i,r.t.name,'orig=',origCheck?origCheck.lat+','+origCheck.lon:'NULL');
-      // Utiliser originCoords (position du tech) OU coords du domicile en fallback
-      const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)
-               ||(r.slot&&r.slot.originCoords)
+    results.forEach((r,ri)=>{
+      const orig=(r.slot&&r.slot.originCoords)
+               ||(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)
                ||(r.t&&r.t._homeCoords);
-      if(!orig||!orig.lat||!orig.lon){
-        // Pas de coords → placer quand même à la destination avec une note
-        markerIdx++; return;
-      }
+      if(!orig||!orig.lat||!orig.lon){markerIdx++;return;}
       const slotLbl=fdate(r.win.date)+' · '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
-      addTechMarker(orig.lat,orig.lon,r.t,markerIdx,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
-      bounds.push([orig.lat,orig.lon]);
+      const isHighlighted=(ri===(highlightedIdx||0));
+      const shouldShow=(ri<3||isHighlighted);
+      if(shouldShow){
+        addTechMarker(orig.lat,orig.lon,r.t,markerIdx,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl,isHighlighted);
+        bounds.push([orig.lat,orig.lon]);
+      }
       markerIdx++;
     });
     if(bounds.length>1)_map.fitBounds(bounds,{padding:[50,50],maxZoom:12});
