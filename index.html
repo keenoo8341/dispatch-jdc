@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.2</span>
+    <span class="app-ver">v11.3</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1106,7 +1106,8 @@ async function runSearch(){
 
   for(let ti=0;ti<pool.length;ti++){
     const t=pool[ti];
-    log('━━ '+t.name+' ('+(ti+1)+'/'+pool.length+') — '+wins.length+' jour(s)','#1a3aff');
+    log('━━ '+t.name+' ('+(ti+1)+'/'+pool.length+')','#1a3aff');
+    log('  Fenêtres: '+wins.map(w=>w.dateStr+' '+new Date(w.start).getHours()+'h→'+new Date(w.end).getHours()+'h').join(' | '));
     prog(65+Math.round((ti/pool.length)*30),t.name+'…');
 
     // Coords depuis cache (déjà géocodés)
@@ -1118,14 +1119,16 @@ async function runSearch(){
     t._homeCoords=homeC||agC;
 
     const techHasCalErr=errors.find(x=>x.startsWith(t.name));
-    if(techHasCalErr)continue;
+    if(techHasCalErr){log('  ✗ Erreur calendrier: '+techHasCalErr,'#f04040');continue;}
 
-    // Parcourir TOUS les jours et TOUS les créneaux (pas de break)
     for(const win of wins){
       const evts=allEvts[t.email+'|'+win.dateStr];
-      if(!evts)continue;
+      if(evts===null){log('  📅 '+win.dateStr+' → agenda inaccessible','#f57f17');continue;}
+      if(!evts){log('  📅 '+win.dateStr+' → non chargé','#888');continue;}
 
+      log('  📅 '+win.dateStr+' → '+evts.length+' event(s)');
       const raw=rawFreeSlots(evts,win.start,win.end,dur,settings.margin);
+      log('  📅 '+win.dateStr+' → '+raw.length+' créneau(x) libre(s) '+(raw.length?raw.map(s=>{const f=new Date(s.from);return f.getHours()+'h'+String(f.getMinutes()).padStart(2,'0');}).join(','):''));
       if(!raw.length)continue;
 
       for(const slot of raw){
@@ -1187,8 +1190,8 @@ async function runSearch(){
           originLbl=homeC?'Domicile':(t.agency||'');
         }
 
-        if(!originC){log('  ✗ Pas de position pour '+t.name,'#f57f17');continue;}
-        log('  Origine: '+originLbl);
+        if(!originC){log('  ✗ slot '+new Date(slot.from).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+' → pas de position','#f57f17');continue;}
+        log('  📍 slot '+new Date(slot.from).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+' → origine: '+originLbl+(lastEv?' [RDV: '+(lastEv.summary||'?').substring(0,15)+']':'[aucun RDV]'));
 
         const travelTo=await osrmCached(originC,dc);
         if(!travelTo)continue;
@@ -1196,7 +1199,14 @@ async function runSearch(){
         const arrival=slot.from+travelTo.dur*1000;
         const endWork=arrival+dur*60000;
         const deadline=slot.nextTs?slot.nextTs-settings.margin*60000:win.end;
-        if(endWork>deadline)continue;
+        const slotTimeStr=new Date(slot.from).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        const arrivalStr=new Date(arrival).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        const endStr=new Date(endWork).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        const deadlineStr=new Date(deadline).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        if(endWork>deadline){
+          log('  ✗ '+slotTimeStr+' → arrivée '+arrivalStr+' fin '+endStr+' > deadline '+deadlineStr,'#f57f17');
+          continue;
+        }
 
         log('  ✓ '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur),'#4cde80');
         travelTo._from=originC;
