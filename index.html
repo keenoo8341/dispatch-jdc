@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v10.6</span>
+    <span class="app-ver">v10.7</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -568,7 +568,10 @@ function showPage(id,el){
 // AUTOCOMPLETE
 // ══════════════════════════════════════════════════
 function onDestInput(){
-  destCoords=null;document.getElementById('destConfirm').textContent='';
+  destCoords=null;
+  document.getElementById('destConfirm').textContent='';
+  // Réinitialiser la carte quand la destination change
+  if(_map){clearMapMarkers();document.getElementById('mapPanel').innerHTML='<div class="map-placeholder"><div style="font-size:36px;">🗺</div><p style="font-size:12px;font-family:IBM Plex Mono,monospace;">La carte s'affichera après la recherche</p></div>';}
   const q=document.getElementById('dest').value.trim();
   if(q.length<2){hideAC();return;}
   clearTimeout(acTimer);acTimer=setTimeout(()=>fetchAC(q),350);
@@ -594,8 +597,9 @@ function renderAC(){
     const type=p.type||'';
     // Icône selon type
     const icon=type==='housenumber'||type==='street'?'📍':type==='municipality'?'🏙':type==='locality'?'📌':'🔍';
+    const cp=p.postcode?'<span style="font-family:IBM Plex Mono,monospace;color:var(--accent);margin-left:5px;font-size:11px;">'+p.postcode+'</span>':'';
     return '<div class="ac-item" onmousedown="selectAC('+i+')">'
-      +'<div class="ac-main">'+icon+' '+label+'</div>'
+      +'<div class="ac-main">'+icon+' '+label+cp+'</div>'
       +'<div class="ac-sub">'+context+'</div></div>';
   }).join('');
   list.style.display='block';
@@ -1120,77 +1124,57 @@ async function runSearch(){
       if(!raw.length)continue;
 
       for(const slot of raw){
-        // Chercher le meilleur RDV d'origine pour ce slot
-        // Priorité : 1) dernier RDV terminé avant le slot ce jour
-        //            2) RDV le plus proche géo ce jour (même après le slot)
-        //            3) dernier RDV des jours précédents
+        // ── Déterminer la position du tech à ce moment précis ──
+        // Priorité 1: dernier RDV TERMINÉ avant le début du slot (ce jour)
         let lastEv=getLastEvBefore(evts,slot.from);
 
-        if(!lastEv){
-          // Chercher le RDV le plus proche géo parmi ceux du jour (avant OU après)
-          // → logique "le tech passe dans le coin"
-          const todayEvts=evts.filter(e=>e.start&&e.start.dateTime&&(e.location||'').trim());
-          if(todayEvts.length>0&&dc){
-            // Trouver celui dont l'adresse est la plus proche de la destination
-            let bestEv=null,bestDist=Infinity;
-            for(const ev of todayEvts){
-              const loc=(ev.location||'').trim();
-              const cpv=extractCPV(loc);
-              const evC=cpv?gcache[cpv]||null:null;
-              if(evC){
-                const d=haversine(evC,dc);
-                if(d<bestDist){bestDist=d;bestEv=ev;}
-              }
-            }
-            if(bestEv)lastEv=bestEv;
+        // Priorité 2: RDV du même jour le plus proche géo de la destination
+        // (le tech "passe dans le coin" même si son RDV est après)
+        if(!lastEv && dc){
+          const todayWithAddr=evts.filter(e=>e.start&&e.start.dateTime&&(e.location||'').trim());
+          let bestEvDist=Infinity;
+          for(const ev of todayWithAddr){
+            const cpv=extractCPV((ev.location||'').trim());
+            const evC=cpv?gcache[cpv]:null;
+            if(evC){const d=haversine(evC,dc);if(d<bestEvDist){bestEvDist=d;lastEv=ev;}}
           }
         }
 
+        // Priorité 3: dernier RDV des jours précédents (jusqu'à 7j)
         if(!lastEv){
-          // Pas de RDV ce jour → chercher les jours précédents (jusqu'à 5j)
-          const winDate=win.date;
-          for(let daysBack=1;daysBack<=5;daysBack++){
-            const prevDate=new Date(winDate);
-            prevDate.setDate(winDate.getDate()-daysBack);
-            const prevDs=prevDate.getFullYear()+'-'+String(prevDate.getMonth()+1).padStart(2,'0')+'-'+String(prevDate.getDate()).padStart(2,'0');
-            const prevEvts=allEvts[t.email+'|'+prevDs];
-            if(prevEvts&&prevEvts.length){
-              const candidates=prevEvts
-                .filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime)
+          for(let d=1;d<=7;d++){
+            const pd=new Date(win.date);pd.setDate(win.date.getDate()-d);
+            const pds=pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');
+            const pEvts=allEvts[t.email+'|'+pds];
+            if(pEvts&&pEvts.length){
+              const cands=pEvts.filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime)
                 .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
-              if(candidates.length){lastEv=candidates[0];break;}
+              if(cands.length){lastEv=cands[0];break;}
             }
           }
         }
-        let originC=null,originLbl='',prevRdv=null;
 
+        // ── Calculer originC ──
+        let originC=null,originLbl='',prevRdv=null;
         if(lastEv){
           const loc=(lastEv.location||'').trim();
-          const locCPV2=extractCPV(loc);
-          const evC2=locCPV2?gcache[locCPV2]||null:null;
-          const evDist=evC2?haversine(evC2,dc):null;
-          prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:false,evDist};
-          // Lecture cache — clé = adresse complète (stockée par geocode())
-          // Lecture cache par CP+ville
           const locCPV=extractCPV(loc);
-          const lastC=locCPV?(gcache[locCPV]||null):null;
-          if(!lastC&&loc)prevRdv.geocodeFailed=true;
+          const lastC=locCPV?gcache[locCPV]||null:null;
+          const evDist=lastC?haversine(lastC,dc):null;
+          prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:!lastC&&!!loc,evDist};
           if(lastC){
-            // Toujours partir du dernier RDV (position réelle du tech)
             originC=lastC;
             originLbl='Dernier RDV'+(lastEv.summary?' : '+lastEv.summary.substring(0,20):'');
           }else{
-            // RDV sans adresse ou non géocodé → agence
             originC=agC||homeC;
-            originLbl=agC?t.agency+(loc?' (RDV sans adresse)':' (RDV sans adresse)'):'Domicile';
+            originLbl=agC?(t.agency+(loc?' (RDV sans adresse)':' (pas de localisation)')):'Domicile';
           }
         }else{
           originC=homeC||agC;
-          originLbl=homeC?'Domicile':(t.agency||'');
+          originLbl=homeC?'Domicile':(t.agency||'Position inconnue');
         }
 
-        if(!originC){log('  ✗ Pas de position pour '+t.name,'#f57f17');continue;}
-        log('  Origine: '+originLbl);
+        if(!originC)continue;
 
         const travelTo=await osrmCached(originC,dc);
         if(!travelTo)continue;
@@ -1200,16 +1184,16 @@ async function runSearch(){
         const deadline=slot.nextTs?slot.nextTs-settings.margin*60000:win.end;
         if(endWork>deadline)continue;
 
-        log('  ✓ '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur),'#4cde80');
-        travelTo._from=originC; // store origin for OSRM enrichment
+        travelTo._from=originC;
         const cand={
           t,
           slot:{from:arrival,to:endWork,dep:slot.from,originLabel:originLbl,
                 approxAddr:false,travelTo,prevRdv,originCoords:originC},
           win,travel:travelTo,originLbl
         };
+        // Garder le meilleur créneau (distance min) pour ce tech
         if(!best||travelTo.dist<best.travel.dist)best=cand;
-        break;
+        break; // un seul slot par jour suffit (le premier libre)
       }
     }
     if(best)results.push(best);
@@ -1287,7 +1271,9 @@ function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
     html:'<div style="background:'+col+';color:#fff;width:36px;height:36px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:-0.5px;">'+ini2+'</div>',
     iconSize:[36,36],iconAnchor:[18,18]
   });
-  const m=L.marker([lat,lon],{icon}).addTo(_map);
+  // Décaler légèrement si markers superposés (même position)
+  const jitter=rank*0.0005;
+  const m=L.marker([lat+jitter,lon+jitter],{icon}).addTo(_map);
   m.bindPopup(
     '<div class="map-popup">'
     +'<strong>'+(medal||'#'+(rank+1))+' '+tech.name+'</strong>'
@@ -1320,11 +1306,8 @@ function updateMap(dc,results){
     const label=(dc.display||'').substring(0,60);
     addDestMarker(dc.lat,dc.lon,label);
     const bounds=[[dc.lat,dc.lon]];
-    console.log('[MAP] dc=',dc.lat,dc.lon,'results=',results.length);
     let markerIdx=0;
     results.forEach((r,i)=>{
-      const origCheck=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.slot&&r.slot.originCoords)||(r.t&&r.t._homeCoords);
-      console.log('[MAP] tech',i,r.t.name,'orig=',origCheck?origCheck.lat+','+origCheck.lon:'NULL');
       // Utiliser originCoords (position du tech) OU coords du domicile en fallback
       const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)
                ||(r.slot&&r.slot.originCoords)
