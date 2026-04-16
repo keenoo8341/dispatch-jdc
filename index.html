@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.6</span>
+    <span class="app-ver">v11.7</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1200,17 +1200,13 @@ async function runSearch(){
 
         const arrival=slot.from+travelTo.dur*1000;
         const endWork=arrival+dur*60000;
-        const deadline=slot.nextTs?slot.nextTs-settings.margin*60000:win.end;
-        const slotTimeStr=new Date(slot.from).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-        const arrivalStr=new Date(arrival).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-        const endStr=new Date(endWork).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-        const deadlineStr=new Date(deadline).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-        if(endWork>deadline){
-          log('  ✗ '+slotTimeStr+' → arrivée '+arrivalStr+' fin '+endStr+' > deadline '+deadlineStr,'#f57f17');
-          continue;
-        }
+        // Vérifier uniquement que l'intervention se termine dans la fenêtre du jour
+        // (pas de contrainte sur le RDV suivant - le planificateur vérifie manuellement)
+        if(endWork>win.end)continue;
 
-        log('  ✓ '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur),'#4cde80');
+        const arrStr=new Date(arrival).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        const endStr2=new Date(endWork).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        log('  ✓ '+fdist(travelTo.dist)+' arrivée '+arrStr+' fin '+endStr2,'#4cde80');
         travelTo._from=originC;
         results.push({
           t,
