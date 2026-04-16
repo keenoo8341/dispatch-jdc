@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.1</span>
+    <span class="app-ver">v11.2</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -695,10 +695,9 @@ function updateTimePrev(){
 }
 function getTimeWin(date){
   const p=PERIODS[selectedPeriod];let ws=p.start*60,we=p.end*60;
-  // heure approx désactivée
-  const now=new Date();
-  if(date.toDateString()===now.toDateString()){const nm=now.getHours()*60+now.getMinutes(),nr=Math.ceil(nm/15)*15;ws=Math.max(ws,nr,9*60);}
-  else{ws=Math.max(ws,9*60);}
+  // Toujours utiliser la plage complète de la période
+  // (les créneaux déjà passés seront naturellement vides dans le calendrier)
+  ws=p.start*60; we=p.end*60;
   if(ws>=we)return null;
   const y=date.getFullYear(),mo=date.getMonth(),dy=date.getDate();
   const base=new Date(y,mo,dy).getTime();
@@ -850,10 +849,13 @@ async function fetchEvents(calId,dateStr){
 }
 function rawFreeSlots(events,wStart,wEnd,durMin,marginMin){
   const minMs=durMin*60000;
+  const now=Date.now();
+  // Pour les créneaux d'aujourd'hui, ne pas proposer un créneau déjà passé
+  const effectiveStart=Math.max(wStart,now);
   const busy=events.filter(e=>e.start&&e.start.dateTime)
     .map(e=>({s:new Date(e.start.dateTime).getTime(),e:new Date(e.end.dateTime).getTime()+marginMin*60000}))
     .sort((a,b)=>a.s-b.s);
-  const slots=[];let cur=wStart;
+  const slots=[];let cur=effectiveStart;
   for(const b of busy){if(cur+minMs<=b.s)slots.push({from:cur,to:b.s,nextTs:b.s});cur=Math.max(cur,b.e);}
   if(cur+minMs<=wEnd)slots.push({from:cur,to:wEnd,nextTs:null});
   return slots;
@@ -1104,7 +1106,7 @@ async function runSearch(){
 
   for(let ti=0;ti<pool.length;ti++){
     const t=pool[ti];
-    log('━━ '+t.name+' ('+(ti+1)+'/'+pool.length+')','#1a3aff');
+    log('━━ '+t.name+' ('+(ti+1)+'/'+pool.length+') — '+wins.length+' jour(s)','#1a3aff');
     prog(65+Math.round((ti/pool.length)*30),t.name+'…');
 
     // Coords depuis cache (déjà géocodés)
