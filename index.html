@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dispatch — Optimiseur d'équipe terrain</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Familjen+Grotesk:wght@400;500;600;700&display=swap');
@@ -23,24 +23,13 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .btn-primary{background:var(--accent);color:#fff;}.btn-primary:hover{background:#0c28e0;}.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
 .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
 .btn-danger{background:var(--red-light);color:var(--red);border:1px solid #f5c0c0;font-size:12px;padding:4px 8px;}
-.btn-search{background:#22c55e;color:#fff;font-size:13px;font-weight:700;padding:7px 16px;border-radius:8px;white-space:nowrap;}
-.btn-search:hover{background:#16a34a;}
-.btn-search:disabled{opacity:.4;cursor:not-allowed;}
-@media(max-width:768px){.btn-search span{display:none;}.btn-search::before{content:'⚡';}}
 .btn-sm{padding:5px 10px;font-size:12px;}
 .page{display:none;}.page.active{display:block;}
 #page-dispatch{padding:0;height:calc(100vh - 52px);overflow:hidden;}
-.dispatch-layout{height:100%;padding:16px;}
-.dispatch-col-left{overflow-y:auto;height:100%;padding-right:8px;position:relative;}
-.dispatch-col-right{overflow-y:auto;height:100%;padding-bottom:24px;display:block;}
-.dispatch-col-right .results-area{display:flex;flex-direction:column;gap:5px;min-height:min-content;}
-.result-card{min-height:unset;height:auto;}
-@media(max-width:768px){
-  #page-dispatch{height:auto;overflow:visible;}
-  .dispatch-layout{height:auto;}
-  .dispatch-col-left{overflow:visible;height:auto;padding:0;}
-  .dispatch-col-right{overflow:visible;height:auto;padding:0;}
-}
+.dispatch-layout{height:100%;padding:12px;}
+.dispatch-col-left{overflow-y:auto;height:100%;padding-right:6px;position:relative;}
+.dispatch-col-right{overflow-y:auto;height:100%;}
+.dispatch-col-map{height:100%;}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;box-shadow:var(--shadow);}
 .card-title{font-size:14px;font-weight:700;margin-bottom:3px;}
 .card-sub{font-size:11px;color:var(--muted);margin-bottom:14px;font-family:'IBM Plex Mono',monospace;}
@@ -49,40 +38,8 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:'Familjen Grotesk',sans-serif;outline:none;transition:border-color .2s;}
 .field input:focus,.field select:focus{border-color:var(--accent);background:#fff;}
 .field-hint{font-size:11px;color:var(--muted);margin-top:3px;font-family:'IBM Plex Mono',monospace;}
-/* Layout — responsive */
-.dispatch-layout{display:grid;grid-template-columns:250px minmax(0,380px) 1fr;gap:10px;max-width:1800px;}
-.dispatch-col-map{height:100%;min-height:300px;}
-/* MOBILE */
-@media(max-width:768px){
-  .topbar{padding:0 12px;height:48px;}
-  .app-ver{display:none;}
-  .auth-status span{display:none;}
-  .nav-tab{padding:5px 10px;font-size:12px;}
-  .page{padding:12px;}
-  .dispatch-layout{grid-template-columns:1fr;gap:12px;}
-  .dispatch-col-map{height:300px;}
-  .config-layout{grid-template-columns:1fr!important;}
-  .svc-row{grid-template-columns:repeat(5,1fr);}
-  .agency-pills{gap:4px;}
-  .ag-pill{font-size:11px;padding:3px 8px;}
-  .delay-presets{gap:4px;}
-  .delay-pre{font-size:11px;padding:3px 8px;}
-  .result-card{grid-template-columns:28px 1fr;gap:8px;padding:10px 12px;}
-  .result-meta{text-align:left;min-width:unset;margin-top:4px;display:flex;gap:12px;align-items:center;}
-  .dist-val{font-size:14px;}
-  .dist-unit{font-size:10px;}
-  .tech-wrap{max-height:260px;}
-  .tech-tbl{font-size:11px;}
-  .card{padding:14px 16px;}
-  /* Sur mobile: résultats en dessous du formulaire */
-  .results-panel{margin-top:0;}
-}
-/* TABLETTE */
-@media(max-width:1024px) and (min-width:769px){
-  .dispatch-layout{grid-template-columns:240px 1fr;}
-  .dispatch-col-map{display:none;}
-  .config-layout{grid-template-columns:1fr!important;}
-}
+/* Layout */
+.dispatch-layout{display:grid;grid-template-columns:360px 1fr;gap:20px;max-width:1280px;}
 /* Autocomplete */
 .dest-wrap{position:relative;}
 .dest-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:9px 12px;font-size:13px;font-family:'Familjen Grotesk',sans-serif;outline:none;transition:border-color .2s;}
@@ -126,13 +83,13 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .tol-btn.active{background:var(--accent-light);border-color:var(--accent);color:var(--accent);font-weight:600;}
 .time-prev{margin-top:8px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:6px 10px;}
 /* Results */
-.results-area{display:flex;flex-direction:column;gap:8px;}
-.result-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;box-shadow:var(--shadow);display:grid;grid-template-columns:32px 1fr;gap:8px;align-items:start;transition:all .15s;position:relative;overflow:hidden;cursor:pointer;}
+.results-area{display:flex;flex-direction:column;gap:12px;}
+.result-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;box-shadow:var(--shadow);display:grid;grid-template-columns:44px 1fr auto;gap:14px;align-items:center;transition:all .15s;position:relative;overflow:hidden;}
 .result-card:hover{border-color:var(--accent);box-shadow:0 4px 20px rgba(26,58,255,.08);}
 .result-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green);}
-.rank{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:2px;}
+.rank{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0;}
 .r1{background:#ffd700;color:#7a5c00;}.r2{background:#e0e0e0;color:#555;}.r3{background:#e8c9a0;color:#7a4a00;}.rn{background:var(--surface2);color:var(--muted);}
-.result-name{font-size:13px;font-weight:700;}
+.result-name{font-size:14px;font-weight:700;}
 .pill{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 8px;border-radius:4px;display:inline-block;}
 .pill-free{background:var(--green-light);color:var(--green);}
 .pill-dep{background:#fff3cd;color:#856404;}
@@ -140,8 +97,8 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 .dispo-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;}
 .dispo-ok{background:var(--green-light);color:var(--green);}
 .day-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#fff3cd;color:#856404;border:1px solid #ffc107;font-family:'IBM Plex Mono',monospace;}
-.result-meta{text-align:right;flex-shrink:0;min-width:80px;}
-.dist-val{font-size:16px;font-weight:800;color:var(--accent);}
+.result-meta{text-align:right;flex-shrink:0;min-width:90px;}
+.dist-val{font-size:19px;font-weight:800;color:var(--accent);}
 .dist-unit{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
 .dist-lbl{font-size:10px;color:var(--muted);margin-top:2px;font-family:'IBM Plex Mono',monospace;}
 .empty-res{text-align:center;padding:50px 20px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:12px;}
@@ -175,12 +132,10 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-#mapPanel{height:100%;min-height:400px;border-radius:10px;overflow:hidden;border:1px solid var(--border);position:relative;}
-.leaflet-container{font-family:'Familjen Grotesk',sans-serif!important;}
-.map-popup{font-size:12px;line-height:1.5;}
-.map-popup strong{font-size:13px;display:block;}
-.map-popup .dist{color:var(--accent);font-weight:700;}
-.map-placeholder{display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:10px;color:var(--muted);background:var(--surface);border-radius:10px;border:1px solid var(--border);}
+#mapPanel{height:100%;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+.map-placeholder{display:flex;align-items:center;justify-content:center;height:100%;min-height:300px;flex-direction:column;gap:10px;color:var(--muted);background:var(--surface);}
+.map-popup strong{font-size:13px;display:block;margin-bottom:2px;}
+.map-popup .dist{color:var(--accent);font-weight:700;font-size:12px;}
 </style>
 </head>
 <body>
@@ -189,23 +144,23 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v10.7</span>
+    <span class="app-ver">v10.9</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
     <button class="nav-tab" onclick="showPage('config',this)">⚙️ Configuration</button>
   </div>
   <div style="display:flex;align-items:center;gap:10px;">
-<div class="auth-status"><div class="dot" id="authDot"></div><span id="authLabel" style="white-space:nowrap;">Non connecté</span></div>
-    <button class="btn btn-primary btn-sm" id="authBtn" onclick="handleAuth()" style="white-space:nowrap;">Se connecter</button>
+    <div class="auth-status"><div class="dot" id="authDot"></div><span id="authLabel">Non connecté</span></div>
+    <button class="btn btn-primary btn-sm" id="authBtn" onclick="handleAuth()">Se connecter</button>
   </div>
 </div>
 
 <!-- ═══════════ DISPATCH ═══════════ -->
-<div class="page active" id="page-dispatch" style="display:block;">
+<div class="page active" id="page-dispatch">
   <div class="dispatch-layout">
     <div class="dispatch-col-left" style="display:flex;flex-direction:column;gap:0;padding-bottom:0;">
-      <div style="display:flex;flex-direction:column;gap:12px;padding-bottom:76px;" id="formFields">
+      <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:72px;">
 
       <!-- Destination -->
       <div class="card">
@@ -285,29 +240,30 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
         <div class="time-prev" id="timePrev"></div>
       </div>
 
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;font-size:14px;" onclick="runSearch()">
+        ⚡ Trouver le meilleur technicien
+      </button>
+
         <div id="searchAlert"></div>
       </div>
-      <!-- Bouton sticky en bas de la colonne gauche -->
-      <div style="position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding:12px 0 8px;margin-top:-20px;">
-        <button class="btn btn-search" style="width:100%;justify-content:center;padding:13px;font-size:15px;border-radius:10px;box-shadow:0 4px 16px rgba(34,197,94,.4);" onclick="runSearch()">
-          ⚡ Trouver le meilleur technicien
+      <div style="position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 35%);padding:10px 0 6px;">
+        <button style="width:100%;background:#22c55e;color:#fff;font-size:14px;font-weight:700;padding:12px;border:none;border-radius:10px;cursor:pointer;box-shadow:0 4px 14px rgba(34,197,94,.4);" onclick="runSearch()">
+          &#9889; Trouver le meilleur technicien
         </button>
       </div>
     </div>
 
     <div class="dispatch-col-right" id="resultsArea">
-    <div class="results-area">
       <div class="empty-res">
         <div style="font-size:44px;margin-bottom:10px;">👥</div>
         <p style="font-family:'IBM Plex Mono',monospace;font-size:12px;">Saisissez une destination et lancez la recherche.</p>
       </div>
     </div>
-    </div>
     <div class="dispatch-col-map">
-      <div id="mapPanel">
+      <div id="mapPanel" style="height:100%;min-height:300px;">
         <div class="map-placeholder">
-          <div style="font-size:36px;">🗺</div>
-          <p style="font-size:12px;font-family:IBM Plex Mono,monospace;">La carte s'affichera après la recherche</p>
+          <div style="font-size:40px;">&#128506;</div>
+          <p style="font-size:12px;font-family:IBM Plex Mono,monospace;">La carte apparaitra apres la recherche</p>
         </div>
       </div>
     </div>
@@ -315,25 +271,23 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
 </div>
 
 <!-- ═══════════ CONFIG ═══════════ -->
-<div class="page" id="page-config" style="display:none;">
+<div class="page" id="page-config">
   <div class="config-layout">
-
-    <!-- Colonne gauche -->
     <div style="display:flex;flex-direction:column;gap:14px;">
       <div class="card">
-        <div class="card-title">🔑 Google Calendar</div>
+        <div class="card-title">🔑 Google Calendar API</div>
         <div class="card-sub">Connexion pré-configurée</div>
         <div class="alert alert-info">Cliquez sur "Se connecter" dans la barre du haut pour autoriser l'accès à Google Calendar et Google Sheets.</div>
       </div>
-      <div class="card">
-        <div class="card-title">📋 Google Sheet techniciens</div>
-        <div class="card-sub">Import automatique depuis la BDD</div>
-        <div class="field">
-          <label>ID du Sheet</label>
-          <input type="text" id="cfgSheetId" placeholder="1aOtAtBAcuH2DDno-wLYaAlu0bY_ddENhXXZVdHBCZR0" />
-          <div class="field-hint">URL du Sheet : /d/<b>XXXX</b>/edit — copier XXXX</div>
         </div>
-        <button class="btn btn-primary btn-sm" id="loadSheetBtn" onclick="loadSheet()" disabled>📥 Charger les techniciens</button>
+        <div class="alert alert-info" style="margin-bottom:10px;">Origines JS autorisées = URL exacte d'ouverture du fichier.</div>
+        
+        <div class="field" style="margin-top:14px;">
+          <label>ID Google Sheet techniciens</label>
+          <input type="text" id="cfgSheetId" placeholder="1aOtAtBAcuH2DDno-wLYaAlu0bY_ddENhXXZVdHBCZR0" />
+          <div class="field-hint">URL du Sheet : /d/<b>XXXX</b>/edit — copier la partie XXXX</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="loadSheetBtn" onclick="loadSheet()" disabled>📥 Charger depuis Google Sheet</button>
         <div id="sheetStatus" style="font-size:11px;margin-top:6px;font-family:IBM Plex Mono,monospace;color:var(--muted);"></div>
       </div>
       <div class="card">
@@ -348,7 +302,6 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
       </div>
     </div>
 
-    <!-- Colonne droite — Techniciens -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <div class="card-title">👷 Techniciens <span class="badge badge-info" id="techCount">0</span></div>
@@ -397,6 +350,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
         <button class="btn btn-primary btn-sm" onclick="addManual()">Ajouter</button>
       </div>
       <div id="configAlert" style="margin-top:10px;"></div>
+    </div>
   </div>
 </div>
 
@@ -443,21 +397,6 @@ const ini=n=>n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
 // ══════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════
-// Normalise un service pour comparaison insensible accents/casse
-function normService(s){
-  return (s||'').toUpperCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g,'') // suppr accents
-    .replace(/[^A-Z0-9]/g,'');                        // garder alphanumériques
-}
-// Table de correspondance: bouton -> valeurs acceptées
-const SVC_MAP={
-  'ALL':null,
-  'CHR':['CHR'],
-  'KEZIA':['KEZIA'],
-  'SECU':['SECU','SECURITE','SÉCURITÉ','SECURITY'],
-  'TABAC':['TABAC']
-};
-
 // Mapping département → agence
 function deptToAgency(dept){
   const d=(dept||'').toString().trim();
@@ -538,9 +477,9 @@ function init(){
   const sid=localStorage.getItem('dsp_sheetId')||'1aOtAtBAcuH2DDno-wLYaAlu0bY_ddENhXXZVdHBCZR0';
   if(document.getElementById('cfgSheetId'))document.getElementById('cfgSheetId').value=sid;
   document.getElementById('cfgMargin').value=settings.margin;
-  // Forcer masquage de toutes les pages sauf dispatch
   document.querySelectorAll('.page').forEach(p=>{p.style.display='none';});
-  document.getElementById('page-dispatch').style.display='block';
+  const pd=document.getElementById('page-dispatch');
+  if(pd)pd.style.display='block';
   renderTechTable();
   buildAgencyPills();
   updateDelayInfo();
@@ -553,14 +492,10 @@ function init(){
 // NAVIGATION
 // ══════════════════════════════════════════════════
 function showPage(id,el){
-  document.querySelectorAll('.page').forEach(p=>{
-    p.classList.remove('active');
-    p.style.display='none';
-  });
+  document.querySelectorAll('.page').forEach(p=>{p.classList.remove('active');p.style.display='none';});
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-  const target=document.getElementById('page-'+id);
-  target.classList.add('active');
-  target.style.display='block';
+  const tgt=document.getElementById('page-'+id);
+  tgt.classList.add('active');tgt.style.display='block';
   if(el)el.classList.add('active');
 }
 
@@ -568,23 +503,17 @@ function showPage(id,el){
 // AUTOCOMPLETE
 // ══════════════════════════════════════════════════
 function onDestInput(){
-  destCoords=null;
-  document.getElementById('destConfirm').textContent='';
-  // Réinitialiser la carte quand la destination change
-  if(_map){clearMapMarkers();document.getElementById('mapPanel').innerHTML='<div class="map-placeholder"><div style="font-size:36px;">🗺</div><p style="font-size:12px;font-family:IBM Plex Mono,monospace;">La carte s'affichera apres la recherche</p></div>';}
+  destCoords=null;document.getElementById('destConfirm').textContent='';
   const q=document.getElementById('dest').value.trim();
   if(q.length<2){hideAC();return;}
   clearTimeout(acTimer);acTimer=setTimeout(()=>fetchAC(q),350);
 }
 async function fetchAC(q){
   try{
-    // api-adresse.data.gouv.fr : gère adresses complètes, accents, abréviations
-    const url='https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=8&autocomplete=1';
-    const r=await fetch(url);
+    const r=await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=8&autocomplete=1');
     const d=await r.json();
     acSuggestions=d.features||[];
-    acIndex=-1;
-    renderAC();
+    acIndex=-1;renderAC();
   }catch(e){hideAC();}
 }
 function renderAC(){
@@ -595,9 +524,8 @@ function renderAC(){
     const label=p.label||'';
     const context=p.context||'';
     const type=p.type||'';
-    // Icône selon type
     const icon=type==='housenumber'||type==='street'?'📍':type==='municipality'?'🏙':type==='locality'?'📌':'🔍';
-    const cp=p.postcode?'<span style="font-family:IBM Plex Mono,monospace;color:var(--accent);margin-left:5px;font-size:11px;">'+p.postcode+'</span>':'';
+    const cp=p.postcode?'<span style="font-family:IBM Plex Mono,monospace;color:var(--accent);margin-left:5px;font-size:11px;">('+p.postcode+')</span>':'';
     return '<div class="ac-item" onmousedown="selectAC('+i+')">'
       +'<div class="ac-main">'+icon+' '+label+cp+'</div>'
       +'<div class="ac-sub">'+context+'</div></div>';
@@ -608,9 +536,10 @@ function selectAC(i){
   const item=acSuggestions[i];if(!item)return;
   const p=item.properties||{};
   const coords=item.geometry&&item.geometry.coordinates;
+  if(!coords)return;
   document.getElementById('dest').value=p.label||'';
-  destCoords={lat:coords[1],lon:coords[0],display:p.label+' ('+p.context+')'};
-  document.getElementById('destConfirm').textContent='✓ '+p.label+(p.context?', '+p.context.split(',')[0]:'');
+  destCoords={lat:coords[1],lon:coords[0],display:p.label+(p.context?', '+p.context:'')};
+  document.getElementById('destConfirm').textContent='✓ '+p.label+(p.context?' ('+p.context.split(',')[0]+')':'');
   hideAC();
 }
 function onDestKey(e){
@@ -626,29 +555,22 @@ function hideAC(){document.getElementById('acList').style.display='none';acSugge
 // ══════════════════════════════════════════════════
 // SERVICE / AGENCY / DELAY / PERIOD
 // ══════════════════════════════════════════════════
+function normService(s){
+  return (s||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9]/g,'');
+}
+const SVC_MAP={'ALL':null,'CHR':['CHR'],'KEZIA':['KEZIA'],'SECU':['SECU','SECURITE','SECURITY'],'TABAC':['TABAC']};
 function toggleService(svc,btn){
   if(svc==='ALL'){
-    // Tout sélectionner
     selectedServices=new Set(['ALL']);
     document.querySelectorAll('.svc-btn').forEach(b=>b.classList.remove('active'));
     document.getElementById('svc-ALL').classList.add('active');
     return;
   }
-  // Désactiver "Tous" si on choisit un service spécifique
   selectedServices.delete('ALL');
   document.getElementById('svc-ALL').classList.remove('active');
-  if(selectedServices.has(svc)){
-    selectedServices.delete(svc);
-    btn.classList.remove('active');
-  }else{
-    selectedServices.add(svc);
-    btn.classList.add('active');
-  }
-  // Si rien de sélectionné → revenir à Tous
-  if(selectedServices.size===0){
-    selectedServices.add('ALL');
-    document.getElementById('svc-ALL').classList.add('active');
-  }
+  if(selectedServices.has(svc)){selectedServices.delete(svc);btn.classList.remove('active');}
+  else{selectedServices.add(svc);btn.classList.add('active');}
+  if(selectedServices.size===0){selectedServices.add('ALL');document.getElementById('svc-ALL').classList.add('active');}
 }
 
 function selectAgency(ag,btn){selectedAgency=ag;document.querySelectorAll('.ag-pill').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
@@ -690,13 +612,14 @@ function toggleApprox(){
 }
 function selectTol(btn){toleranceMin=parseInt(btn.dataset.t);document.querySelectorAll('.tol-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');updateTimePrev();}
 function updateTimePrev(){
-  const p=PERIODS[selectedPeriod];
+  const p=PERIODS[selectedPeriod];let ws=p.start*60,we=p.end*60;
+  // heure approx desactivee
   const f=m=>String(Math.floor(m/60)).padStart(2,'0')+'h'+String(m%60).padStart(2,'0');
-  document.getElementById('timePrev').textContent='→ Créneau : '+f(p.start*60)+' – '+f(p.end*60)+' (hors fériés & week-ends)';
+  document.getElementById('timePrev').textContent='→ Créneau : '+f(ws)+' – '+f(we)+' (hors fériés & week-ends)';
 }
 function getTimeWin(date){
   const p=PERIODS[selectedPeriod];let ws=p.start*60,we=p.end*60;
-  // heure approx désactivée
+  // heure approx desactivee
   const now=new Date();
   if(date.toDateString()===now.toDateString()){const nm=now.getHours()*60+now.getMinutes(),nr=Math.ceil(nm/15)*15;ws=Math.max(ws,nr,9*60);}
   else{ws=Math.max(ws,9*60);}
@@ -793,30 +716,17 @@ function initGSI(){
     scope:'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets.readonly',
     callback:resp=>{
       if(resp.error){setAuth(false);return;}
-      gToken=resp.access_token;
-      setAuth(true);
-      // Planifier le refresh avant expiration (token dure ~1h, refresh à 55min)
+      gToken=resp.access_token;setAuth(true);
       clearTimeout(window._tokenRefreshTimer);
-      window._tokenRefreshTimer=setTimeout(()=>{
-        console.log('[AUTH] Token refresh automatique...');
-        tokenClient.requestAccessToken({prompt:''});
-      }, 55*60*1000);
+      window._tokenRefreshTimer=setTimeout(()=>tokenClient.requestAccessToken({prompt:''}),55*60*1000);
     }
   });
 }
-
-// Refresh silencieux si erreur 401 détectée
 async function refreshToken(){
-  return new Promise((resolve)=>{
+  return new Promise(resolve=>{
     if(!tokenClient){resolve(false);return;}
     const prev=tokenClient.callback;
-    tokenClient.callback=(resp)=>{
-      tokenClient.callback=prev;
-      if(resp.error){resolve(false);return;}
-      gToken=resp.access_token;
-      setAuth(true);
-      resolve(true);
-    };
+    tokenClient.callback=resp=>{tokenClient.callback=prev;if(resp.error){resolve(false);return;}gToken=resp.access_token;setAuth(true);resolve(true);};
     tokenClient.requestAccessToken({prompt:''});
   });
 }
@@ -827,8 +737,7 @@ function setAuth(ok){
   document.getElementById('authBtn').textContent=ok?'Déconnecter':'Se connecter';
   const lb=document.getElementById('loadSheetBtn');
   if(lb)lb.disabled=!ok;
-  // Import automatique du Sheet à chaque connexion
-  if(ok) loadSheet();
+  if(ok)loadSheet();
 }
 
 // ══════════════════════════════════════════════════
@@ -839,13 +748,7 @@ async function fetchEvents(calId,dateStr){
   const p=new URLSearchParams({timeMin:toRFC3339(dateStr,'00:00'),timeMax:toRFC3339(dateStr,'23:59'),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
   const doFetch=async()=>fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken}});
   let r=await doFetch();
-  // Token expiré → refresh silencieux et retry
-  if(r.status===401){
-    console.log('[AUTH] 401 détecté, refresh token...');
-    const ok=await refreshToken();
-    if(ok){r=await doFetch();}
-    else{throw new Error('Session expirée — veuillez vous reconnecter.');}
-  }
+  if(r.status===401){const ok=await refreshToken();if(ok)r=await doFetch();else throw new Error('Session expiree - reconnectez-vous.');}
   if(!r.ok){let d='';try{const j=await r.json();d=j?.error?.message||'';}catch(e){}throw new Error(r.status+(d?' : '+d:''));}
   return (await r.json()).items||[];
 }
@@ -865,56 +768,50 @@ function getLastEvBefore(events,ts){
 }
 
 // ══════════════════════════════════════════════════
-// GEO — CP+ville uniquement, Nominatim throttlé
+// GEO - CP+ville uniquement, Nominatim
 // ══════════════════════════════════════════════════
 const gcache={};
 let _nomTs=0;
 
-// Extrait CP+Ville depuis n'importe quelle adresse
-// Ex: "27 AVENUE DU GENERAL DE GAULLE, 83320 CARQUEIRANNE, FRANCE" -> "83320 CARQUEIRANNE"
-// Ex: "83130 LA GARDE" -> "83130 LA GARDE"
 function extractCPV(addr){
   if(!addr)return null;
-  const m=addr.match(/(\d{5})\s+([A-Za-z\u00C0-\u00FF][A-Za-z\u00C0-\u00FF\s\-]{0,40})(?:\s*,|\s*$)/);
+  const m=addr.match(/([0-9]{5})[ ]+([A-Za-z\u00C0-\u00FF][A-Za-z\u00C0-\u00FF \-]{0,35})(?:,|$)/);
   if(m)return m[1]+' '+m[2].trim();
-  // Juste le CP si pas de ville trouvée
-  const cp=addr.match(/\d{5}/);
+  const cp=addr.match(/[0-9]{5}/);
   return cp?cp[0]:null;
 }
 
-// Geocode: TOUJOURS par CP+ville (simple, fiable, rapide)
-// Pour domicile/agence déjà formatés en "CP VILLE": direct
 async function geocode(addr){
   if(!addr||addr.length<3)return null;
-
-  // Extraire CP+ville
   const cpv=extractCPV(addr);
   if(!cpv)return null;
-
-  // Cache par CP+ville (clé courte et stable)
   if(gcache[cpv]!==undefined)return gcache[cpv];
-
-  // Throttle Nominatim
   const wait=1200-(Date.now()-_nomTs);
   if(wait>0)await sleep(wait);
   _nomTs=Date.now();
-
   try{
-    const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(cpv)+'&format=json&limit=1&countrycodes=fr';
-    const r=await fetch(url,{headers:{'Accept-Language':'fr','User-Agent':'Dispatch-JDC/8.2'}});
+    const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(cpv)+'&format=json&limit=1&countrycodes=fr',{headers:{'Accept-Language':'fr','User-Agent':'Dispatch-JDC/10.8'}});
     const d=await r.json();
-    if(d&&d.length){
-      const res={lat:+d[0].lat,lon:+d[0].lon,display:cpv,approx:true};
-      return gcache[cpv]=res;
-    }
+    if(d&&d.length){const res={lat:+d[0].lat,lon:+d[0].lon,display:cpv,approx:true};return gcache[cpv]=res;}
   }catch(e){}
-
-  gcache[cpv]=null;
-  return null;
+  gcache[cpv]=null;return null;
 }
 
-// geocodeT = alias
+async function geocodeDestination(q){
+  if(!q||q.length<2)return null;
+  try{
+    const r=await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=1&autocomplete=0');
+    const d=await r.json();
+    if(d.features&&d.features.length>0){
+      const f=d.features[0];const [lon,lat]=f.geometry.coordinates;
+      return{lat,lon,display:f.properties.label+(f.properties.context?', '+f.properties.context:'')};
+    }
+  }catch(e){}
+  return await geocode(q);
+}
+
 async function geocodeT(addr){return geocode(addr);}
+
 // ══════════════════════════════════════════════════
 // ORIGIN LOGIC
 // ══════════════════════════════════════════════════
@@ -958,203 +855,140 @@ async function osrmCached(from,to){
 }
 
 
-// Géocodage destination — utilise gouv.fr (adresses complètes) puis Nominatim
-async function geocodeDestination(q){
-  if(!q||q.length<2)return null;
-  // 1. api-adresse.data.gouv.fr
-  try{
-    const r=await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=1&autocomplete=0');
-    const d=await r.json();
-    if(d.features&&d.features.length>0){
-      const f=d.features[0];
-      const [lon,lat]=f.geometry.coordinates;
-      const p=f.properties;
-      return{lat,lon,display:p.label+(p.context?', '+p.context:'')};
-    }
-  }catch(e){}
-  // 2. Nominatim fallback
-  return await geocode(q);
-}
-
 async function runSearch(){
   const destText=document.getElementById('dest').value.trim();
   const dur=parseInt(document.getElementById('duration').value);
   document.getElementById('searchAlert').innerHTML='';
-  if(!gToken)return alert2('err',"Connectez-vous d'abord à Google Calendar.");
+  if(!gToken)return alert2('err',"Connectez-vous d'abord a Google Calendar.");
   if(!destText)return alert2('warn','Saisissez une destination.');
-  if(!technicians.length)return alert2('warn','Aucun technicien configuré.');
+  if(!technicians.length)return alert2('warn','Aucun technicien configure.');
 
   const ra=document.getElementById('resultsArea');
   ra.innerHTML='<div class="results-area"><div class="loading-card">'
-    +'<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Analyse en cours…</div>'
+    +'<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Analyse en cours...</div>'
     +'<div class="pbar-wrap"><div class="pbar" id="pbar" style="width:0"></div></div>'
-    +'<div style="font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;margin-top:7px;" id="plabel">Initialisation…</div>'
-    +'<div id="logBox" style="margin-top:14px;background:#1a1916;border-radius:8px;padding:12px;max-height:260px;overflow-y:auto;text-align:left;"></div>'
+    +'<div style="font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;margin-top:7px;" id="plabel">Initialisation...</div>'
+    +'<div id="logBox" style="margin-top:14px;background:#1a1916;border-radius:8px;padding:12px;max-height:240px;overflow-y:auto;text-align:left;"></div>'
     +'</div></div>';
 
   // 1. Destination
   let dc=destCoords;
   if(!dc){
-    log('Géocodage destination…');
-    // Essai gouv.fr d'abord (meilleur pour adresses complètes)
+    log('Geocodage destination...');
     dc=await geocodeDestination(destText);
-    if(!dc){ra.innerHTML='';return alert2('err','Destination introuvable : '+destText+'.');}
+    if(!dc){ra.innerHTML='';return alert2('err','Destination introuvable.');}
     destCoords=dc;
     log('Destination: '+dc.display.substring(0,50),'#4cde80');
   }
 
-  // 2. Filtrage pool
+  // 2. Filtrage
   let pool;
-  if(selectedServices.has('ALL')){
-    pool=[...technicians];
-  }else{
-    pool=technicians.filter(t=>{
-      const ns=normService(t.service);
-      return [...selectedServices].some(svc=>{
-        const accepted=SVC_MAP[svc];
-        return accepted&&accepted.some(a=>normService(a)===ns||ns.startsWith(normService(a))||normService(a).startsWith(ns));
-      });
-    });
-  }
+  if(selectedServices.has('ALL')){pool=[...technicians];}
+  else{pool=technicians.filter(t=>{const ns=normService(t.service);return[...selectedServices].some(svc=>{const acc=SVC_MAP[svc];return acc&&acc.some(a=>normService(a)===ns||ns.startsWith(normService(a))||normService(a).startsWith(ns));});});}
   if(selectedAgency!=='ALL')pool=pool.filter(t=>(t.agency||'').trim()===selectedAgency);
   if(!pool.length){ra.innerHTML='';return alert2('warn','Aucun technicien pour ce service / cette agence.');}
+
   const wins=getDayWindows();
-  if(!wins.length){ra.innerHTML='';return alert2('warn','Aucun jour ouvré dans ce délai.');}
-  log(pool.length+' techniciens · '+wins.length+' jour(s)');
+  if(!wins.length){ra.innerHTML='';return alert2('warn','Aucun jour ouvre dans ce delai.');}
+  log(pool.length+' techniciens - '+wins.length+' jour(s)');
 
-  // 3. Précache domicile + agence (parallel par tech)
-  prog(5,'Positions techniciens…');
+  // 3. Precache domicile + agence
+  prog(5,'Positions techniciens...');
   for(const t of pool){
+    const homeCPV=extractCPV(t.address||'');
+    const agCPV=extractCPV(t.agency||'');
     await Promise.all([
-      t.address?geocode(t.address):Promise.resolve(null),
-      t.agency?geocode(t.agency):Promise.resolve(null)
+      homeCPV?geocode(t.address):Promise.resolve(null),
+      agCPV?geocode(t.agency):Promise.resolve(null)
     ]);
+    const homeC=homeCPV?gcache[homeCPV]||null:null;
+    const agC=agCPV?gcache[agCPV]||null:null;
+    t._homeCoords=homeC||agC;
   }
-  log('Domiciles/agences géocodés','#4cde80');
+  log('Positions OK','#4cde80');
 
-  // 4. Charger tous les agendas (séquentiel - Google Calendar rate-limit)
-  prog(10,'Chargement agendas…');
+  // 4. Charger agendas (j-2 inclus)
+  prog(10,'Chargement agendas...');
   const errors=[];
-  const allEvts={}; // "email|dateStr" -> events[] | null
-
-  // Préparer les dates à charger: jours de la fenêtre + les 2 jours ouvrés précédents
-  // (pour trouver le dernier RDV avant le premier créneau)
+  const allEvts={};
   const extraDates=new Set();
-  if(wins.length>0){
-    // Remonter jusqu'à 5 jours calendaires pour trouver 2 jours ouvrés
-    for(let d=1;d<=7;d++){
-      const prevD=new Date(wins[0].date);
-      prevD.setDate(wins[0].date.getDate()-d);
-      const ds=prevD.getFullYear()+'-'+String(prevD.getMonth()+1).padStart(2,'0')+'-'+String(prevD.getDate()).padStart(2,'0');
-      extraDates.add(ds);
-      if(extraDates.size>=2)break;
-    }
+  for(let d=1;d<=7;d++){
+    const pd=new Date(wins[0].date);pd.setDate(wins[0].date.getDate()-d);
+    const ds=pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');
+    extraDates.add(ds);if(extraDates.size>=2)break;
   }
-
-  let calCount=0;
   const calDates=[...extraDates,...wins.map(w=>w.dateStr)];
-  const calTotal=pool.length*calDates.length;
-
+  let calCount=0,calTotal=pool.length*calDates.length;
   for(const t of pool){
-    // Charger les jours précédents (silencieux, pas d'erreur si indispo)
     for(const ds of extraDates){
       const k=t.email+'|'+ds;
       try{allEvts[k]=await fetchEvents(t.email,ds);}catch(e){allEvts[k]=[];}
       calCount++;prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
     }
-    // Charger les jours de la fenêtre (avec gestion d'erreur)
     for(const win of wins){
       const k=t.email+'|'+win.dateStr;
-      try{
-        allEvts[k]=await fetchEvents(t.email,win.dateStr);
-      }catch(e){
-        allEvts[k]=null;
-        const msg=e.message.includes('expirée')||e.message.includes('401')
-          ?t.name+' : session expirée (reconnexion en cours…)'
-          :t.name+' : agenda inaccessible ('+e.message+')';
-        if(!errors.find(x=>x.startsWith(t.name)))errors.push(msg);
-      }
-      calCount++;
-      prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
+      try{allEvts[k]=await fetchEvents(t.email,win.dateStr);}
+      catch(e){allEvts[k]=null;if(!errors.find(x=>x.startsWith(t.name)))errors.push(t.name+' : agenda inaccessible ('+e.message+')');}
+      calCount++;prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
     }
   }
-  log('Agendas chargés','#4cde80');
+  log('Agendas charges','#4cde80');
 
-  // 5. Collecter toutes les adresses RDV uniques et les géocoder
+  // 5. Geocoder adresses RDV
   const rdvSet=new Set();
-  for(const evts of Object.values(allEvts)){
-    if(!evts)continue;
-    for(const e of evts){const loc=(e.location||'').trim();if(loc)rdvSet.add(loc);}
-  }
-  log('Géocodage '+rdvSet.size+' adresse(s) RDV…');
+  for(const evts of Object.values(allEvts)){if(!evts)continue;for(const e of evts){const loc=(e.location||'').trim();if(loc)rdvSet.add(loc);}}
+  log('Geocodage '+rdvSet.size+' adresse(s) RDV...');
   let gi=0;
-  for(const addr of rdvSet){
-    await geocode(addr);
-    gi++;
-    prog(35+Math.round((gi/rdvSet.size)*30),'Géo RDV '+gi+'/'+rdvSet.size);
-  }
-  log('Adresses RDV géocodées','#4cde80');
+  for(const addr of rdvSet){await geocode(addr);gi++;prog(35+Math.round((gi/rdvSet.size)*30),'Geo '+gi+'/'+rdvSet.size);}
+  log('Geocodage OK','#4cde80');
 
-  // 6. Analyse en mémoire (zéro réseau)
-  prog(65,'Analyse créneaux…');
+  // 6. Analyse creneaux
+  prog(65,'Analyse...');
   const results=[];
-
   for(let ti=0;ti<pool.length;ti++){
     const t=pool[ti];
-    log('━━ '+t.name+' ('+(ti+1)+'/'+pool.length+')','#1a3aff');
-    prog(65+Math.round((ti/pool.length)*30),t.name+'…');
-
-    // Coords depuis cache (déjà géocodés)
+    log('-- '+t.name+' ('+(ti+1)+'/'+pool.length+')','#1a3aff');
+    prog(65+Math.round((ti/pool.length)*28),t.name+'...');
     const homeCPV=extractCPV(t.address||'');
     const agCPV=extractCPV(t.agency||'');
     const homeC=homeCPV?gcache[homeCPV]||null:null;
     const agC=agCPV?gcache[agCPV]||null:null;
-    // Stocker sur le tech pour la carte
     t._homeCoords=homeC||agC;
-
     let best=null;
-    const techHasCalErr=errors.find(x=>x.startsWith(t.name));
-    if(techHasCalErr)continue;
+    if(errors.find(x=>x.startsWith(t.name)))continue;
 
     for(const win of wins){
       const evts=allEvts[t.email+'|'+win.dateStr];
       if(!evts)continue;
-
       const raw=rawFreeSlots(evts,win.start,win.end,dur,settings.margin);
       if(!raw.length)continue;
 
       for(const slot of raw){
-        // ── Déterminer la position du tech à ce moment précis ──
-        // Priorité 1: dernier RDV TERMINÉ avant le début du slot (ce jour)
+        // Origine: 1) dernier RDV termine avant slot
         let lastEv=getLastEvBefore(evts,slot.from);
-
-        // Priorité 2: RDV du même jour le plus proche géo de la destination
-        // (le tech "passe dans le coin" même si son RDV est après)
-        if(!lastEv && dc){
+        // 2) RDV meme jour le plus proche geo
+        if(!lastEv&&dc){
           const todayWithAddr=evts.filter(e=>e.start&&e.start.dateTime&&(e.location||'').trim());
-          let bestEvDist=Infinity;
+          let bestD=Infinity;
           for(const ev of todayWithAddr){
             const cpv=extractCPV((ev.location||'').trim());
             const evC=cpv?gcache[cpv]:null;
-            if(evC){const d=haversine(evC,dc);if(d<bestEvDist){bestEvDist=d;lastEv=ev;}}
+            if(evC){const d=haversine(evC,dc);if(d<bestD){bestD=d;lastEv=ev;}}
           }
         }
-
-        // Priorité 3: dernier RDV des jours précédents (jusqu'à 7j)
+        // 3) Jours precedents
         if(!lastEv){
           for(let d=1;d<=7;d++){
             const pd=new Date(win.date);pd.setDate(win.date.getDate()-d);
             const pds=pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');
             const pEvts=allEvts[t.email+'|'+pds];
             if(pEvts&&pEvts.length){
-              const cands=pEvts.filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime)
-                .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
+              const cands=pEvts.filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime).sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
               if(cands.length){lastEv=cands[0];break;}
             }
           }
         }
 
-        // ── Calculer originC ──
         let originC=null,originLbl='',prevRdv=null;
         if(lastEv){
           const loc=(lastEv.location||'').trim();
@@ -1162,75 +996,53 @@ async function runSearch(){
           const lastC=locCPV?gcache[locCPV]||null:null;
           const evDist=lastC?haversine(lastC,dc):null;
           prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:!lastC&&!!loc,evDist};
-          if(lastC){
-            originC=lastC;
-            originLbl='Dernier RDV'+(lastEv.summary?' : '+lastEv.summary.substring(0,20):'');
-          }else{
-            originC=agC||homeC;
-            originLbl=agC?(t.agency+(loc?' (RDV sans adresse)':' (pas de localisation)')):'Domicile';
-          }
+          if(lastC){originC=lastC;originLbl='Dernier RDV'+(lastEv.summary?' : '+lastEv.summary.substring(0,20):'');}
+          else{originC=agC||homeC;originLbl=agC?(t.agency+(loc?' (RDV sans adresse)':' (pas de loc)')):'Domicile';}
         }else{
           originC=homeC||agC;
           originLbl=homeC?'Domicile':(t.agency||'Position inconnue');
         }
-
         if(!originC)continue;
 
         const travelTo=await osrmCached(originC,dc);
         if(!travelTo)continue;
-
         const arrival=slot.from+travelTo.dur*1000;
         const endWork=arrival+dur*60000;
         const deadline=slot.nextTs?slot.nextTs-settings.margin*60000:win.end;
         if(endWork>deadline)continue;
 
+        log('  OK '+fdist(travelTo.dist)+' depuis '+originLbl.substring(0,25),'#4cde80');
         travelTo._from=originC;
-        const cand={
-          t,
-          slot:{from:arrival,to:endWork,dep:slot.from,originLabel:originLbl,
-                approxAddr:false,travelTo,prevRdv,originCoords:originC},
-          win,travel:travelTo,originLbl
-        };
-        // Garder le meilleur créneau (distance min) pour ce tech
+        const cand={t,slot:{from:arrival,to:endWork,dep:slot.from,originLabel:originLbl,approxAddr:false,travelTo,prevRdv,originCoords:originC},win,travel:travelTo,originLbl};
         if(!best||travelTo.dist<best.travel.dist)best=cand;
-        break; // un seul slot par jour suffit (le premier libre)
+        break;
       }
     }
     if(best)results.push(best);
   }
 
-  // Trier par haversine
-  results.sort((a,b)=>{
-    const da=a.travel.dist,db=b.travel.dist;
-    if(Math.abs(da-db)>500)return da-db;
-    return a.win.date-b.win.date;
-  });
-  // Enrichir le top 10 avec vraies distances OSRM (routières)
-  prog(95,'Calcul distances routières…');
-  const top=results.slice(0,15); // top 15 pour OSRM, on affiche top 10
+  // Tri haversine
+  results.sort((a,b)=>{const da=a.travel.dist,db=b.travel.dist;if(Math.abs(da-db)>500)return da-db;return a.win.date-b.win.date;});
+  // OSRM top 15
+  prog(93,'Distances routieres...');
+  const top=results.slice(0,15);
   for(const r of top){
     if(r.slot&&r.slot.travelTo&&r.slot.travelTo._from){
       try{const orig=r.slot.travelTo._from;const real=await osrmReal(orig,dc);real._from=orig;r.travel=real;r.slot.travelTo=real;}catch(e){}
     }
   }
-  // Re-trier avec vraies distances routières
-  top.sort((a,b)=>{
-    const da=a.travel.dist,db=b.travel.dist;
-    if(Math.abs(da-db)>500)return da-db;
-    return a.win.date-b.win.date;
-  });
-  prog(100,'Terminé');
-  log('Terminé — '+results.length+' résultat(s)','#4cde80');
+  top.sort((a,b)=>{const da=a.travel.dist,db=b.travel.dist;if(Math.abs(da-db)>500)return da-db;return a.win.date-b.win.date;});
+  prog(100,'Termine');
+  log('Termine - '+results.length+' resultat(s)','#4cde80');
   const topDisplay=top.slice(0,10);
   renderResults(topDisplay,results.length,errors,destText,dc,dur);
   updateMap(dc,topDisplay);
 }
 
-// ══════════════════════════════════════════════════
+
 // CARTE LEAFLET
 // ══════════════════════════════════════════════════
 let _map=null,_markers=[];
-
 function initMap(lat,lon){
   const panel=document.getElementById('mapPanel');
   if(!panel)return;
@@ -1238,88 +1050,50 @@ function initMap(lat,lon){
     panel.innerHTML='<div id="leafletMap" style="height:100%;min-height:300px;"></div>';
     _map=L.map('leafletMap',{zoomControl:true,attributionControl:false});
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(_map);
-    L.control.attribution({prefix:'© <a href="https://osm.org">OpenStreetMap</a>'}).addTo(_map);
+    L.control.attribution({prefix:'© <a href="https://osm.org">OSM</a>'}).addTo(_map);
   }
   _map.setView([lat,lon],11);
 }
-
-function clearMapMarkers(){
-  _markers.forEach(m=>{try{_map.removeLayer(m);}catch(e){}});
-  _markers=[];
-}
-
+function clearMapMarkers(){_markers.forEach(m=>{try{_map.removeLayer(m);}catch(e){}});_markers=[];}
 function addDestMarker(lat,lon,label){
   if(!_map)return;
-  const icon=L.divIcon({
-    className:'',
-    html:'<div style="background:#c41a1a;width:22px;height:22px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);"></div>',
-    iconSize:[22,22],iconAnchor:[11,11]
-  });
+  const icon=L.divIcon({className:'',html:'<div style="background:#c41a1a;width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);"></div>',iconSize:[20,20],iconAnchor:[10,10]});
   const m=L.marker([lat,lon],{icon,zIndexOffset:1000}).addTo(_map);
-  m.bindPopup('<div class="map-popup"><strong>📍 Destination</strong><div style="font-size:10px;color:#666;">'+label+'</div></div>',{maxWidth:200}).openPopup();
+  m.bindPopup('<div class="map-popup"><strong>&#128205; Destination</strong><div style="font-size:10px;color:#666;">'+label.substring(0,60)+'</div></div>',{maxWidth:220}).openPopup();
   _markers.push(m);
 }
-
 function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
   if(!_map)return;
   const cols=['#1a3aff','#0d7a3e','#c45c00','#8b1a8b','#c41a1a','#00838f','#5d4037','#2e7d32','#1565c0','#6a1b9a'];
   const col=cols[rank%cols.length];
-  // Initiales du tech (2 lettres max)
   const ini2=tech.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-  const icon=L.divIcon({
-    className:'',
-    html:'<div style="background:'+col+';color:#fff;width:36px;height:36px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:-0.5px;">'+ini2+'</div>',
-    iconSize:[36,36],iconAnchor:[18,18]
-  });
-  // Décaler légèrement si markers superposés (même position)
-  const jitter=rank*0.0005;
+  const jitter=rank*0.0008;
+  const icon=L.divIcon({className:'',html:'<div style="background:'+col+';color:#fff;width:34px;height:34px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;">'+ini2+'</div>',iconSize:[34,34],iconAnchor:[17,17]});
   const m=L.marker([lat+jitter,lon+jitter],{icon}).addTo(_map);
-  m.bindPopup(
-    '<div class="map-popup">'
-    +'<strong>'+(medal||'#'+(rank+1))+' '+tech.name+'</strong>'
-    +(tech.service?'<span style="font-size:10px;color:#888;"> · '+tech.service+'</span>':'')
-    +'<div class="dist">'+distLabel+'</div>'
-    +'<div style="font-size:10px;color:#888;">Depuis : '+originLbl+'</div>'
-    +'<div style="font-size:10px;color:#333;">'+slotLabel+'</div>'
-    +'</div>',{maxWidth:230}
-  );
+  m.bindPopup('<div class="map-popup"><strong>#'+(rank+1)+' '+tech.name+'</strong>'+(tech.service?'<span style="font-size:10px;color:#888;"> · '+tech.service+'</span>':'')+'<div class="dist">'+distLabel+'</div><div style="font-size:10px;color:#888;">Depuis: '+originLbl+'</div><div style="font-size:10px;">'+slotLabel+'</div></div>',{maxWidth:240});
   _markers.push(m);
 }
-
 function highlightTech(idx,lat,lon){
   if(!_map||!lat||!lon)return;
   _map.setView([lat,lon],13,{animate:true});
-  // Highlight la card
-  document.querySelectorAll('.result-card').forEach((el,i)=>{
-    el.style.outline=i===idx?'2px solid var(--accent)':'none';
-  });
-  // Ouvrir le popup du marker
+  document.querySelectorAll('.result-card').forEach((el,i)=>{el.style.outline=i===idx?'2px solid var(--accent)':'none';});
   if(_markers[idx+1])_markers[idx+1].openPopup();
 }
-
 function updateMap(dc,results){
-  if(!dc)return;
-  if(typeof L==='undefined'){console.warn('Leaflet non chargé');return;}
+  if(!dc||typeof L==='undefined')return;
   try{
     initMap(dc.lat,dc.lon);
     clearMapMarkers();
-    const label=(dc.display||'').substring(0,60);
-    addDestMarker(dc.lat,dc.lon,label);
+    addDestMarker(dc.lat,dc.lon,dc.display||'');
     const bounds=[[dc.lat,dc.lon]];
-    let markerIdx=0;
-    results.forEach((r,i)=>{
-      // Utiliser originCoords (position du tech) OU coords du domicile en fallback
-      const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)
-               ||(r.slot&&r.slot.originCoords)
-               ||(r.t&&r.t._homeCoords);
-      if(!orig||!orig.lat||!orig.lon){
-        // Pas de coords → placer quand même à la destination avec une note
-        markerIdx++; return;
-      }
-      const slotLbl=fdate(r.win.date)+' · '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
-      addTechMarker(orig.lat,orig.lon,r.t,markerIdx,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
+    let mi=0;
+    results.forEach(r=>{
+      const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.slot&&r.slot.originCoords)||(r.t&&r.t._homeCoords);
+      if(!orig||!orig.lat||!orig.lon){mi++;return;}
+      const slotLbl=fdate(r.win.date)+' '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
+      addTechMarker(orig.lat,orig.lon,r.t,mi,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
       bounds.push([orig.lat,orig.lon]);
-      markerIdx++;
+      mi++;
     });
     if(bounds.length>1)_map.fitBounds(bounds,{padding:[50,50],maxZoom:12});
     else _map.setView([dc.lat,dc.lon],12);
@@ -1356,89 +1130,77 @@ function renderResults(res,total,errors,dest,dc,dur){
   const agLbl=selectedAgency==='ALL'?'Toutes agences':selectedAgency;
   const delLbl=delayDays===0?"Aujourd'hui":delayDays===1?'Demain':delayDays+'j';
 
-  let h='<div class="card" style="padding:14px 18px;">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
-    +'<div><span style="font-size:15px;font-weight:700;">Top '+res.length+' — <span style="color:var(--accent)">'+dest+'</span></span>'
-    +'<div style="font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;margin-top:2px;">'+delLbl+' · '+svcLbl+' · '+agLbl+' · '+dur+' min</div></div>'
-    +'<div style="display:flex;gap:5px;"><span class="dispo-badge dispo-ok">✓ '+res.length+'</span>'
-    +'<span class="dispo-badge" style="background:var(--red-light);color:var(--red);">✗ '+(total-res.length)+'</span></div></div>'
-    +'<div style="margin-top:6px;font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;">📍 '+dc.display.substring(0,80)
-    +' <a href="https://www.openstreetmap.org/?mlat='+dc.lat+'&mlon='+dc.lon+'&zoom=13" target="_blank" style="color:var(--accent);text-decoration:none;">Voir ↗</a></div></div>';
+  let h='<div class="results-area">';
+  h+='<div class="card" style="padding:12px 16px;margin-bottom:0;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">'
+    +'<div><span style="font-size:14px;font-weight:700;">Top '+res.length+' &mdash; <span style="color:var(--accent)">'+dest+'</span></span>'
+    +'<div style="font-size:11px;color:var(--muted);font-family:IBM Plex Mono,monospace;">'+delLbl+' &middot; '+svcLbl+' &middot; '+agLbl+' &middot; '+dur+' min</div></div>'
+    +'<div style="display:flex;gap:4px;"><span class="dispo-badge dispo-ok">&#10003; '+res.length+'</span>'
+    +'<span class="dispo-badge" style="background:var(--red-light);color:var(--red);">&#10007; '+(total-res.length)+'</span></div></div>'
+    +'<div style="font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;margin-top:4px;">&#128205; '+dc.display.substring(0,80)
+    +' <a href="https://www.openstreetmap.org/?mlat='+dc.lat+'&mlon='+dc.lon+'&zoom=13" target="_blank" style="color:var(--accent);">Voir &#8599;</a></div></div>';
 
-  if(errors.length)h+='<div class="alert alert-warn">⚠ '+errors.length+' agenda(s) inaccessible(s) — exclus :<br><span style="font-family:IBM Plex Mono,monospace;font-size:11px;">'+errors.join('<br>')+'</span></div>';
+  if(errors.length)h+='<div class="alert alert-warn">&#9888; '+errors.length+' agenda(s) inaccessible(s):<br><span style="font-family:IBM Plex Mono,monospace;font-size:10px;">'+errors.join('<br>')+'</span></div>';
 
-  if(!res.length){h+='<div class="empty-res"><div style="font-size:36px;margin-bottom:10px;">😔</div><p style="font-family:IBM Plex Mono,monospace;font-size:12px;">Aucun technicien disponible dans ce délai.</p></div>';ra.innerHTML=h;return;}
+  if(!res.length){h+='<div class="empty-res"><div style="font-size:36px;margin-bottom:8px;">&#128532;</div><p style="font-size:12px;font-family:IBM Plex Mono,monospace;">Aucun technicien disponible.</p></div></div>';ra.innerHTML=h;return;}
 
   res.forEach((r,idx)=>{
     const rc=idx===0?'r1':idx===1?'r2':idx===2?'r3':'rn';
-    const rl=idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':'<span style="font-size:13px;font-weight:800;">#'+(idx+1)+'</span>';
+    const rl=idx===0?'&#129351;':idx===1?'&#129352;':idx===2?'&#129353;':'<span style="font-size:11px;font-weight:800;">#'+(idx+1)+'</span>';
     const isToday=r.win.date.toDateString()===new Date().toDateString();
     const dateLbl=isToday?"Aujourd'hui":fdate(r.win.date);
-
-    // Distance badge (top right)
-    const distBadge=r.travel
-      ?'<span style="font-size:15px;font-weight:800;color:var(--accent);">'+fdist(r.travel.dist)+'</span>'
-       +'<span style="font-size:10px;color:var(--muted);display:block;">'+fdur(r.travel.dur)+'</span>'
-      :'—';
-
-    // RDV précédent block
+    const distBadge=r.travel?'<span style="font-size:15px;font-weight:800;color:var(--accent);">'+fdist(r.travel.dist)+'</span><span style="font-size:10px;color:var(--muted);display:block;">'+fdur(r.travel.dur)+'</span>':'&mdash;';
     const prevBlock=(()=>{
       if(!r.slot.prevRdv)return '';
       const pr=r.slot.prevRdv;
-      const failed=pr.geocodeFailed?' <span style="color:var(--orange)">⚠</span>':'';
-      const addrShort=(pr.rawAddr||'').length>50?pr.rawAddr.substring(0,48)+'…':(pr.rawAddr||'<em>sans adresse</em>');
-      return '<div style="margin-top:5px;padding:4px 8px;background:var(--surface2);border-radius:5px;border-left:3px solid '+(pr.geocodeFailed?'var(--orange)':'var(--border)')+';">'
+      const failed=pr.geocodeFailed?' <span style="color:var(--orange)">&#9888;</span>':'';
+      const addr=(pr.rawAddr||'').length>50?pr.rawAddr.substring(0,48)+'...':pr.rawAddr||'<em>sans adresse</em>';
+      return '<div style="margin-top:4px;padding:3px 8px;background:var(--surface2);border-radius:5px;border-left:3px solid '+(pr.geocodeFailed?'var(--orange)':'var(--border)')+';">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">'
-        +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;white-space:nowrap;">RDV préc.</span>'
-        +(pr.summary?'<span style="font-size:10px;font-weight:600;color:var(--text);margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">'+pr.summary.substring(0,22)+'</span>':'')
-        +(pr.evDist!=null?'<span style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;padding-left:4px;">📍'+pr.evDist.toFixed(1)+'km</span>':'')
+        +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;">RDV prec.</span>'
+        +(pr.summary?'<span style="font-size:10px;font-weight:600;color:var(--text);flex:1;margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+pr.summary.substring(0,22)+'</span>':'')
+        +(pr.evDist!=null?'<span style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;padding-left:4px;">&#128205;'+pr.evDist.toFixed(1)+'km</span>':'')
         +'</div>'
         +'<div style="font-size:10px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(pr.rawAddr||'')+'">'
-        +addrShort+failed+'</div>'
+        +addr+failed+'</div>'
         +'</div>';
     })();
-
     const _lat=r.slot.originCoords?r.slot.originCoords.lat:null;
     const _lon=r.slot.originCoords?r.slot.originCoords.lon:null;
     h+='<div class="result-card" onclick="highlightTech('+idx+','+_lat+','+_lon+')">'
-      // Rang
       +'<div class="rank '+rc+'">'+rl+'</div>'
-      // Contenu
       +'<div style="min-width:0;">'
-        // Ligne 1: nom + distance
-        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:4px;">'
-          +'<div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">'
-            +'<div style="width:30px;height:30px;border-radius:50%;background:'+r.t.color+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">'+ini(r.t.name)+'</div>'
+        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:3px;">'
+          +'<div style="display:flex;align-items:center;gap:5px;min-width:0;flex:1;">'
+            +'<div style="width:28px;height:28px;border-radius:50%;background:'+r.t.color+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;">'+ini(r.t.name)+'</div>'
             +'<div style="min-width:0;">'
-              +'<div class="result-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+r.t.name+'</div>'
+              +'<div class="result-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;">'+r.t.name+'</div>'
               +'<div style="font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+r.t.email+'</div>'
             +'</div>'
           +'</div>'
-          +'<div style="flex-shrink:0;text-align:right;padding-left:6px;">'+distBadge+'</div>'
+          +'<div style="flex-shrink:0;text-align:right;">'+distBadge+'</div>'
         +'</div>'
-        // Ligne 2: badges service/agence/dispo
-        +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;">'
-          +'<span class="dispo-badge dispo-ok" style="font-size:10px;padding:1px 6px;">✓ Dispo</span>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:3px;">'
+          +'<span class="dispo-badge dispo-ok" style="font-size:10px;padding:1px 6px;">&#10003; Dispo</span>'
           +(r.t.service?'<span style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);font-family:IBM Plex Mono,monospace;">'+r.t.service+'</span>':'')
           +(r.t.agency?'<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:var(--accent-light);color:var(--accent);font-family:IBM Plex Mono,monospace;">'+r.t.agency+'</span>':'')
         +'</div>'
-        // Ligne 3: date + horaires
-        +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;">'
-          +'<span class="day-badge" style="font-size:10px;padding:2px 7px;">📅 '+dateLbl+'</span>'
-          +(r.slot.dep?'<span class="pill pill-dep" style="font-size:10px;padding:2px 6px;">🚗'+ftime(r.slot.dep)+'</span>':'')
-          +'<span class="pill pill-free" style="font-size:10px;padding:2px 6px;">🟢'+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end))+'</span>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:3px;">'
+          +'<span class="day-badge" style="font-size:10px;padding:2px 7px;">&#128197; '+dateLbl+'</span>'
+          +(r.slot.dep?'<span class="pill pill-dep" style="font-size:10px;padding:2px 5px;">&#128663;'+ftime(r.slot.dep)+'</span>':'')
+          +'<span class="pill pill-free" style="font-size:10px;padding:2px 5px;">&#128994;'+ftime(r.slot.from)+'&ndash;'+ftime(Math.min(r.slot.to,r.win.end))+'</span>'
         +'</div>'
-        // RDV précédent
         +prevBlock
-        // Itinéraire
-        +'<div style="margin-top:4px;"><a href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+dc.lat+','+dc.lon+'" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;white-space:nowrap;">🧭 Itinéraire vers '+dest+' ↗</a></div>'
+        +'<div style="margin-top:3px;"><a href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+dc.lat+','+dc.lon+'" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;white-space:nowrap;">&#129517; Itineraire vers '+dest+' &#8599;</a></div>'
       +'</div>'
     +'</div>';
-  });;
+  });
 
-  h+='<div style="text-align:center;font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;padding:5px 0;">OSRM · OpenStreetMap · Nominatim — 100% gratuit</div>';
-  ra.innerHTML='<div class="results-area">'+h+'</div>';
+  h+='<div style="text-align:center;font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;padding:4px 0;">OSRM &middot; OpenStreetMap &middot; Nominatim</div>';
+  h+='</div>';
+  ra.innerHTML=h;
 }
+
 
 init();
 </script>
