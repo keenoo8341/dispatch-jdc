@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v11.8</span>
+    <span class="app-ver">v12.3</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1435,18 +1435,26 @@ function renderResults(res,total,errors,dest,dc,dur){
   if(!res.length){h+='<div class="empty-res"><div style="font-size:36px;margin-bottom:10px;">😔</div><p style="font-family:IBM Plex Mono,monospace;font-size:12px;">Aucun technicien disponible dans ce délai.</p></div>';ra.innerHTML=h;return;}
 
   res.forEach((r,idx)=>{
-    const rc=idx===0?'r1':idx===1?'r2':idx===2?'r3':'rn';
-    const rl=idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':'<span style="font-size:13px;font-weight:800;">#'+(idx+1)+'</span>';
+    const rl=idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':null;
     const isToday=r.win.date.toDateString()===new Date().toDateString();
     const dateLbl=isToday?"Aujourd'hui":fdate(r.win.date);
+    const _lat=r.slot.originCoords?r.slot.originCoords.lat:null;
+    const _lon=r.slot.originCoords?r.slot.originCoords.lon:null;
 
-    // Distance badge (top right)
+    // Colonne gauche : médaille (top3) ou avatar+numéro
+    const leftCol=rl
+      ?'<div style="width:34px;display:flex;align-items:flex-start;justify-content:center;padding-top:2px;font-size:24px;flex-shrink:0;">'+rl+'</div>'
+      :'<div style="width:34px;display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:2px;padding-top:2px;">'
+        +'<div style="width:30px;height:30px;border-radius:50%;background:'+r.t.color+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">'+ini(r.t.name)+'</div>'
+        +'<span style="font-size:9px;font-weight:700;color:var(--muted);">#'+(idx+1)+'</span>'
+       +'</div>';
+
+    // Distance
     const distBadge=r.travel
-      ?'<span style="font-size:15px;font-weight:800;color:var(--accent);">'+fdist(r.travel.dist)+'</span>'
-       +'<span style="font-size:10px;color:var(--muted);display:block;">'+fdur(r.travel.dur)+'</span>'
-      :'—';
+      ?'<div style="text-align:right;flex-shrink:0;"><span style="font-size:15px;font-weight:800;color:var(--accent);">'+fdist(r.travel.dist)+'</span><div style="font-size:10px;color:var(--muted);">'+fdur(r.travel.dur)+'</div></div>'
+      :'';
 
-    // RDV précédent block
+    // RDV précédent
     const prevBlock=(()=>{
       if(!r.slot.prevRdv)return '';
       const pr=r.slot.prevRdv;
@@ -1454,53 +1462,55 @@ function renderResults(res,total,errors,dest,dc,dur){
       const addrShort=(pr.rawAddr||'').length>50?pr.rawAddr.substring(0,48)+'…':(pr.rawAddr||'<em>sans adresse</em>');
       return '<div style="margin-top:5px;padding:4px 8px;background:var(--surface2);border-radius:5px;border-left:3px solid '+(pr.geocodeFailed?'var(--orange)':'var(--border)')+';">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">'
-        +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;white-space:nowrap;">RDV préc.</span>'
-        +(pr.summary?'<span style="font-size:10px;font-weight:600;color:var(--text);margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">'+pr.summary.substring(0,22)+'</span>':'')
-        +(pr.evDist!=null?'<span style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;padding-left:4px;">📍'+pr.evDist.toFixed(1)+'km</span>':'')
+        +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;">RDV préc.</span>'
+        +(pr.summary?'<span style="font-size:10px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">'+pr.summary.substring(0,22)+'</span>':'')
+        +(pr.evDist!=null?'<span style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;margin-left:auto;">📍'+pr.evDist.toFixed(1)+'km</span>':'')
         +'</div>'
-        +'<div style="font-size:10px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(pr.rawAddr||'')+'">'
-        +addrShort+failed+'</div>'
+        +'<div style="font-size:10px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(pr.rawAddr||'')+'">'+addrShort+failed+'</div>'
         +'</div>';
     })();
 
-    const _lat=r.slot.originCoords?r.slot.originCoords.lat:null;
-    const _lon=r.slot.originCoords?r.slot.originCoords.lon:null;
     h+='<div class="result-card" onclick="highlightTech('+idx+','+_lat+','+_lon+')">'
-      // Rang
-      +'<div class="rank '+rc+'">'+rl+'</div>'
-      // Contenu
+      // Colonne gauche
+      +leftCol
+      // Contenu principal
       +'<div style="min-width:0;">'
-        // Ligne 1: nom + distance
-        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:4px;">'
-          +'<div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">'
-            +'<div style="width:30px;height:30px;border-radius:50%;background:'+r.t.color+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">'+ini(r.t.name)+'</div>'
-            +'<div style="min-width:0;">'
-              +'<div class="result-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+r.t.name+'</div>'
-              +'<div style="font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+r.t.email+'</div>'
-            +'</div>'
+        // Nom + distance
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:4px;">'
+          +'<div style="min-width:0;">'
+            +'<div class="result-name">'+r.t.name+'</div>'
+            +'<div style="font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+r.t.email+'</div>'
           +'</div>'
-          +'<div style="flex-shrink:0;text-align:right;padding-left:6px;">'+distBadge+'</div>'
+          +distBadge
         +'</div>'
-        // Ligne 2: badges service/agence/dispo
+        // Badges
         +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;">'
           +'<span class="dispo-badge dispo-ok" style="font-size:10px;padding:1px 6px;">✓ Dispo</span>'
           +(r.t.service?'<span style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);font-family:IBM Plex Mono,monospace;">'+r.t.service+'</span>':'')
           +(r.t.agency?'<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:var(--accent-light);color:var(--accent);font-family:IBM Plex Mono,monospace;">'+r.t.agency+'</span>':'')
         +'</div>'
-        // Ligne 3: date + horaires
+        // Date + horaires
         +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;">'
           +'<span class="day-badge" style="font-size:10px;padding:2px 7px;">📅 '+dateLbl+'</span>'
           +(r.slot.dep?'<span class="pill pill-dep" style="font-size:10px;padding:2px 6px;">🚗'+ftime(r.slot.dep)+'</span>':'')
           +'<span class="pill pill-free" style="font-size:10px;padding:2px 6px;">🟢'+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end))+'</span>'
         +'</div>'
-        // RDV précédent
         +prevBlock
-        // Itinéraire
-        +'<div style="margin-top:4px;"><a href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+dc.lat+','+dc.lon+'" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;white-space:nowrap;">🧭 Itinéraire vers '+dest+' ↗</a></div>'
+        +(()=>{
+          const d=r.win.date;
+          const y=d.getFullYear(),mo=d.getMonth()+1,dy=d.getDate();
+          // URL Google Calendar : ouvre la vue jour du tech à la date du créneau
+          // cid= ajoute le calendrier du tech dans la vue
+          const calUrl='https://calendar.google.com/calendar/r/day/'+y+'/'+mo+'/'+dy+'?cid='+encodeURIComponent(r.t.email);
+          const mapsUrl='https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+dc.lat+','+dc.lon;
+          return '<div style="margin-top:5px;display:flex;gap:8px;flex-wrap:wrap;">'
+            +'<a href="'+calUrl+'" target="_blank" style="font-size:10px;color:#0d7a3e;text-decoration:none;background:var(--green-light);padding:3px 8px;border-radius:4px;font-weight:600;white-space:nowrap;">📅 Ouvrir planning '+r.t.name.split(' ')[0]+' ↗</a>'
+            +'<a href="'+mapsUrl+'" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;white-space:nowrap;">🧭 Itinéraire ↗</a>'
+            +'</div>';
+        })()
       +'</div>'
     +'</div>';
-  });;
-
+  });
   h+='<div style="text-align:center;font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;padding:5px 0;">OSRM · OpenStreetMap · Nominatim — 100% gratuit</div>';
   ra.innerHTML='<div class="results-area">'+h+'</div>';
 }
