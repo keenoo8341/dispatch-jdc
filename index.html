@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v12.3</span>
+    <span class="app-ver">v12.4</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1139,17 +1139,29 @@ async function runSearch(){
         // Priorité : 1) dernier RDV terminé avant le slot ce jour
         //            2) RDV le plus proche géo ce jour (même après le slot)
         //            3) dernier RDV des jours précédents
+        const slotT=ftime(slot.from);
         let lastEv=getLastEvBefore(evts,slot.from);
+        let originSource='';
+
+        if(lastEv){
+          originSource='P1:dernier RDV terminé avant slot';
+          log('    ['+slotT+'] P1 → '+( lastEv.summary||'?').substring(0,25)+(lastEv.location?' @ '+(lastEv.location||'').substring(0,20):''));
+        }
 
         if(!lastEv && dc){
-          // Priorité 2: RDV du même jour le plus proche géo de la destination
-          // (le tech passe dans le coin même si son RDV est avant ou après)
+          // Priorité 2: RDV du même jour le plus proche géo
           const todayWithAddr=evts.filter(e=>e.start&&e.start.dateTime&&(e.location||'').trim());
           let bestEvDist=Infinity;
           for(const ev of todayWithAddr){
             const cpv=extractCPV((ev.location||'').trim());
             const evC=cpv?gcache[cpv]:null;
             if(evC){const d=haversine(evC,dc);if(d<bestEvDist){bestEvDist=d;lastEv=ev;}}
+          }
+          if(lastEv){
+            originSource='P2:RDV même jour+proche géo';
+            log('    ['+slotT+'] P2 → '+(lastEv.summary||'?').substring(0,25)+' dist='+bestEvDist.toFixed(1)+'km','#a0c4ff');
+          }else{
+            log('    ['+slotT+'] P2 → aucun RDV avec adresse ce jour');
           }
         }
 
@@ -1162,9 +1174,15 @@ async function runSearch(){
             if(pEvts&&pEvts.length){
               const cands=pEvts.filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime)
                 .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
-              if(cands.length){lastEv=cands[0];break;}
+              if(cands.length){
+                lastEv=cands[0];
+                originSource='P3:RDV J-'+d;
+                log('    ['+slotT+'] P3 J-'+d+' → '+(lastEv.summary||'?').substring(0,25)+(lastEv.location?' @ '+(lastEv.location||'').substring(0,20):''),'#ffd6a0');
+                break;
+              }
             }
           }
+          if(!lastEv) log('    ['+slotT+'] P3 → aucun RDV trouvé sur 7j','#f04040');
         }
         let originC=null,originLbl='',prevRdv=null;
 
@@ -1203,11 +1221,15 @@ async function runSearch(){
         const endWork=arrival+dur*60000;
         // Vérifier uniquement que l'intervention se termine dans la fenêtre du jour
         // (pas de contrainte sur le RDV suivant - le planificateur vérifie manuellement)
-        if(endWork>win.end)continue;
+        const endStr2b=new Date(arrival+dur*60000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        if(endWork>win.end){
+          log('    ['+slotT+'] ✗ fin '+endStr2b+' > fin journée '+ftime(win.end),'#f57f17');
+          continue;
+        }
 
         const arrStr=new Date(arrival).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
         const endStr2=new Date(endWork).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-        log('  ✓ '+fdist(travelTo.dist)+' arrivée '+arrStr+' fin '+endStr2,'#4cde80');
+        log('    ['+slotT+'] ✓ '+fdist(travelTo.dist)+' via '+originSource+' → arrivée '+arrStr+' fin '+endStr2,'#4cde80');
         travelTo._from=originC;
         results.push({
           t,
