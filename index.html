@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v12.6</span>
+    <span class="app-ver">v12.7</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1149,26 +1149,36 @@ async function runSearch(){
         }
 
         if(!lastEv && dc){
-          // Priorité 2: RDV du même jour PROCHE TEMPORELLEMENT du slot
-          // Seulement RDV terminés avant le slot OU débutant dans les 2h après
-          const twoH=2*3600000;
-          const todayWithAddr=evts.filter(e=>{
+          // Priorité 2a: RDV du même jour déjà TERMINÉ avant le slot
+          // → tech était là, c'est son point de départ
+          const todayTerminated=evts.filter(e=>{
             if(!e.start||!e.start.dateTime||(e.location||'').trim()==='')return false;
-            const evEnd=new Date(e.end.dateTime).getTime();
-            const evStart=new Date(e.start.dateTime).getTime();
-            return evEnd<=slot.from||(evStart>slot.from&&evStart<=slot.from+twoH);
+            return new Date(e.end.dateTime).getTime()<=slot.from;
           });
-          let bestEvDist=Infinity;
-          for(const ev of todayWithAddr){
+          let bestDist2a=Infinity;
+          for(const ev of todayTerminated){
             const cpv=extractCPV((ev.location||'').trim());
             const evC=cpv?gcache[cpv]:null;
-            if(evC){const d=haversine(evC,dc);if(d<bestEvDist){bestEvDist=d;lastEv=ev;}}
+            if(evC){const d=haversine(evC,dc);if(d<bestDist2a){bestDist2a=d;lastEv=ev;}}
           }
           if(lastEv){
-            originSource='P2:RDV même jour proche';
-            log('    ['+slotT+'] P2 → '+(lastEv.summary||'?').substring(0,25)+' dist='+bestEvDist.toFixed(1)+'km','#a0c4ff');
-          }else{
-            log('    ['+slotT+'] P2 → aucun RDV temporellement proche ce jour');
+            originSource='P2a:RDV terminé aujourd'hui';
+            log('    ['+slotT+'] P2a → '+(lastEv.summary||'?').substring(0,25)+' dist='+bestDist2a.toFixed(1)+'km','#a0c4ff');
+          } else {
+            // Priorité 2b: RDV futur ce jour dans les 3h → tech part de domicile/agence
+            const twoH=3*3600000;
+            const hasFutureRdv=evts.some(e=>{
+              if(!e.start||!e.start.dateTime)return false;
+              const evStart=new Date(e.start.dateTime).getTime();
+              return evStart>slot.from&&evStart<=slot.from+twoH;
+            });
+            if(hasFutureRdv){
+              log('    ['+slotT+'] P2b → RDV futur proche ce jour, origine = domicile/agence');
+              originSource='P2b:part pour RDV futur';
+              // lastEv reste null → va utiliser homeC/agC
+            } else {
+              log('    ['+slotT+'] P2 → aucun RDV utilisable ce jour');
+            }
           }
         }
 
