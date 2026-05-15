@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v12.8</span>
+    <span class="app-ver">v12.9</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1161,6 +1161,44 @@ async function runSearch(){
             if(!originSource){originSource='domicile';log('    ['+slotT+'] Défaut → domicile/agence');}
           }
         }
+
+        // ── Calculer originC depuis lastEv ──────────────────────────────
+        let originC=null,originLbl='',prevRdv=null;
+        if(lastEv&&originSource!=='P2b'&&originSource!=='domicile'){
+          const loc=(lastEv.location||'').trim();
+          const locCPV=extractCPV(loc);
+          const lastC=locCPV?gcache[locCPV]||null:null;
+          const evDist=lastC&&dc?haversine(lastC,dc):null;
+          prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:!lastC&&!!loc,evDist};
+          if(lastC){
+            originC=lastC;
+            originLbl=originSource+' : '+(lastEv.summary||'').substring(0,25);
+          } else {
+            // RDV sans adresse géocodée → domicile/agence
+            originC=agC||homeC;
+            originLbl=agC?t.agency+' (RDV sans adresse)':'Domicile';
+          }
+        } else {
+          // P2b ou défaut → domicile/agence
+          originC=homeC||agC;
+          originLbl=homeC?'Domicile':(t.agency||'Position inconnue');
+        }
+
+        if(!originC){log('    ['+slotT+'] ✗ pas de coords origine','#f04040');continue;}
+
+        const travelTo=await osrmCached(originC,dc);
+        if(!travelTo){log('    ['+slotT+'] ✗ calcul trajet impossible','#f04040');continue;}
+
+        const arrival=slot.from+travelTo.dur*1000;
+        const endWork=arrival+dur*60000;
+        if(endWork>win.end){
+          log('    ['+slotT+'] ✗ fin '+ftime(endWork)+' > fin journée','#f57f17');
+          continue;
+        }
+        const arrT=ftime(arrival);
+        const endT=ftime(endWork);
+        log('    ['+slotT+'] ✓ '+fdist(travelTo.dist)+' ('+originSource+') arr='+arrT+' fin='+endT,'#4cde80');
+
         travelTo._from=originC; // store origin for OSRM enrichment
         const cand={
           t,
