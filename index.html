@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v12.4</span>
+    <span class="app-ver">v12.5</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1149,8 +1149,15 @@ async function runSearch(){
         }
 
         if(!lastEv && dc){
-          // Priorité 2: RDV du même jour le plus proche géo
-          const todayWithAddr=evts.filter(e=>e.start&&e.start.dateTime&&(e.location||'').trim());
+          // Priorité 2: RDV du même jour PROCHE TEMPORELLEMENT du slot
+          // Seulement RDV terminés avant le slot OU débutant dans les 2h après
+          const twoH=2*3600000;
+          const todayWithAddr=evts.filter(e=>{
+            if(!e.start||!e.start.dateTime||(e.location||'').trim()==='')return false;
+            const evEnd=new Date(e.end.dateTime).getTime();
+            const evStart=new Date(e.start.dateTime).getTime();
+            return evEnd<=slot.from||(evStart>slot.from&&evStart<=slot.from+twoH);
+          });
           let bestEvDist=Infinity;
           for(const ev of todayWithAddr){
             const cpv=extractCPV((ev.location||'').trim());
@@ -1158,10 +1165,10 @@ async function runSearch(){
             if(evC){const d=haversine(evC,dc);if(d<bestEvDist){bestEvDist=d;lastEv=ev;}}
           }
           if(lastEv){
-            originSource='P2:RDV même jour+proche géo';
+            originSource='P2:RDV même jour proche';
             log('    ['+slotT+'] P2 → '+(lastEv.summary||'?').substring(0,25)+' dist='+bestEvDist.toFixed(1)+'km','#a0c4ff');
           }else{
-            log('    ['+slotT+'] P2 → aucun RDV avec adresse ce jour');
+            log('    ['+slotT+'] P2 → aucun RDV temporellement proche ce jour');
           }
         }
 
