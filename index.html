@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v14.0</span>
+    <span class="app-ver">v14.1</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -797,7 +797,7 @@ function initGSI(){
       clearTimeout(window._tokenRefreshTimer);
       window._tokenRefreshTimer=setTimeout(()=>{
         console.log('[AUTH] Token refresh automatique...');
-        tokenClient.requestAccessToken({prompt:''});
+        tokenClient.requestAccessToken({prompt:'none'});
       }, 55*60*1000);
     }
   });
@@ -815,7 +815,7 @@ async function refreshToken(){
       setAuth(true);
       resolve(true);
     };
-    tokenClient.requestAccessToken({prompt:''});
+    tokenClient.requestAccessToken({prompt:'none'});
   });
 }
 function handleAuth(){if(!clientId){alert('Configurez d\'abord votre Client ID.');return;}if(gToken){gToken=null;setAuth(false);return;}if(!tokenClient){loadGAPI();setTimeout(handleAuth,1500);return;}tokenClient.requestAccessToken();}
@@ -856,6 +856,28 @@ async function prefetchAgendas(){
 // CALENDAR
 // ══════════════════════════════════════════════════
 function toRFC3339(dateStr,timeStr){const d=new Date(dateStr+'T'+timeStr);const off=-d.getTimezoneOffset();const sign=off>=0?'+':'-';const hh=String(Math.floor(Math.abs(off)/60)).padStart(2,'0');const mm=String(Math.abs(off)%60).padStart(2,'0');return dateStr+'T'+timeStr+':00'+sign+hh+':'+mm;}
+
+// ── Cache agendas session (20 min) ──────────────────────────────────────
+const CAL_KEY='dsp_cal';
+const CAL_TTL=20*60*1000;
+function saveCalCache(calId,dateStr,events){
+  try{
+    const raw=sessionStorage.getItem(CAL_KEY)||'{}';
+    const obj=JSON.parse(raw);
+    obj[calId+'|'+dateStr]={ts:Date.now(),events};
+    sessionStorage.setItem(CAL_KEY,JSON.stringify(obj));
+  }catch(e){}
+}
+function loadCalCache(calId,dateStr){
+  try{
+    const raw=sessionStorage.getItem(CAL_KEY);
+    if(!raw)return null;
+    const entry=JSON.parse(raw)[calId+'|'+dateStr];
+    if(entry&&Date.now()-entry.ts<CAL_TTL)return entry.events;
+  }catch(e){}
+  return null;
+}
+
 async function fetchEvents(calId,dateStr){
   const cached=loadCalCache(calId,dateStr);
   if(cached!==null)return cached;
