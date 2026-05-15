@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v12.5</span>
+    <span class="app-ver">v12.6</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1173,13 +1173,15 @@ async function runSearch(){
         }
 
         if(!lastEv){
-          // Priorité 3: dernier RDV des jours précédents (jusqu'à 7j)
-          for(let d=1;d<=7;d++){
+          // Priorité 3: dernier RDV de la veille (J-1) ou avant-veille (J-2) uniquement
+          // Au-delà le tech est rentré chez lui → on utilisera domicile/agence
+          for(let d=1;d<=2;d++){
             const pd=new Date(win.date);pd.setDate(win.date.getDate()-d);
             const pds=pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');
             const pEvts=allEvts[t.email+'|'+pds];
             if(pEvts&&pEvts.length){
-              const cands=pEvts.filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime)
+              const cands=pEvts
+                .filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime&&(e.location||'').trim())
                 .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
               if(cands.length){
                 lastEv=cands[0];
@@ -1189,7 +1191,7 @@ async function runSearch(){
               }
             }
           }
-          if(!lastEv) log('    ['+slotT+'] P3 → aucun RDV trouvé sur 7j','#f04040');
+          if(!lastEv) log('    ['+slotT+'] P3 → pas de RDV récent → origine domicile/agence');
         }
         let originC=null,originLbl='',prevRdv=null;
 
