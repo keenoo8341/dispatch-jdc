@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v12.9</span>
+    <span class="app-ver">v13.0</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -426,8 +426,6 @@ function isWorkDay(date){
 // STATE
 // ══════════════════════════════════════════════════
 let gToken=null,technicians=[],settings={margin:15};
-let _logHistory=[];
-let _lastResults=null,_lastDc=null;
 let clientId='',selectedServices=new Set(['ALL']),selectedAgency='ALL',selectedPeriod='allday';
 let approxActive=false,approxHour=13,toleranceMin=270,delayDays=2;
 let destCoords=null,acSuggestions=[],acIndex=-1,acTimer=null;
@@ -979,7 +977,6 @@ async function runSearch(){
   const destText=document.getElementById('dest').value.trim();
   const dur=parseInt(document.getElementById('duration').value);
   document.getElementById('searchAlert').innerHTML='';
-  _logHistory=[];
   if(!gToken)return alert2('err',"Connectez-vous d'abord à Google Calendar.");
   if(!destText)return alert2('warn','Saisissez une destination.');
   if(!technicians.length)return alert2('warn','Aucun technicien configuré.');
@@ -1124,47 +1121,57 @@ async function runSearch(){
       if(!raw.length)continue;
 
       for(const slot of raw){
-        const slotT=ftime(slot.from);
+        // Chercher le meilleur RDV d'origine pour ce slot
+        // Priorité : 1) dernier RDV terminé avant le slot ce jour
+        //            2) RDV le plus proche géo ce jour (même après le slot)
+        //            3) dernier RDV des jours précédents
         // P1: dernier RDV terminé avant le slot ce jour
         let lastEv=getLastEvBefore(evts,slot.from);
-        let originSource='';
-        if(lastEv){
-          originSource='P1';
-          log('    ['+slotT+'] P1 → '+(lastEv.summary||'').substring(0,20)+(lastEv.location?' @'+(lastEv.location||'').substring(0,15):''));
-        }
+        let useHome=false;
+
         if(!lastEv){
-          // P2a: RDV terminé avant le slot, le plus proche géo
-          const terminated=evts.filter(e=>e.start&&e.start.dateTime&&(e.location||'').trim()&&new Date(e.end.dateTime).getTime()<=slot.from);
+          // P2a: RDV terminé avant le slot, le plus proche géo de la destination
+          const terminated=evts.filter(e=>
+            e.start&&e.start.dateTime&&(e.location||'').trim()&&
+            new Date(e.end.dateTime).getTime()<=slot.from
+          );
           let best2=Infinity;
           for(const ev of terminated){
             const cpv=extractCPV((ev.location||'').trim());
             const evC=cpv?gcache[cpv]:null;
             if(evC&&dc){const d=haversine(evC,dc);if(d<best2){best2=d;lastEv=ev;}}
           }
-          if(lastEv){originSource='P2a';log('    ['+slotT+'] P2a → '+(lastEv.summary||'').substring(0,20)+' '+best2.toFixed(0)+'km','#a0c4ff');}
         }
+
         if(!lastEv){
           // P2b: RDV futur dans les 3h → tech part de domicile/agence
-          const hasFuture=evts.some(e=>e.start&&e.start.dateTime&&new Date(e.start.dateTime).getTime()>slot.from&&new Date(e.start.dateTime).getTime()<=slot.from+10800000);
-          if(hasFuture){originSource='P2b';log('    ['+slotT+'] P2b → RDV futur proche, départ domicile/agence','#a0c4ff');}
-          else{
-            // P3: veille ou avant-veille avec adresse
+          const hasFuture=evts.some(e=>
+            e.start&&e.start.dateTime&&
+            new Date(e.start.dateTime).getTime()>slot.from&&
+            new Date(e.start.dateTime).getTime()<=slot.from+10800000
+          );
+          if(hasFuture){
+            useHome=true;
+          } else {
+            // P3: veille (J-1) ou avant-veille (J-2) uniquement, avec adresse
             for(let d=1;d<=2;d++){
-              const pd=new Date(win.date);pd.setDate(win.date.getDate()-d);
+              const pd=new Date(win.date);
+              pd.setDate(win.date.getDate()-d);
               const pds=pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');
               const pEvts=allEvts[t.email+'|'+pds];
-              if(pEvts){
-                const cands=pEvts.filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime&&(e.location||'').trim()).sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
-                if(cands.length){lastEv=cands[0];originSource='P3-J'+d;log('    ['+slotT+'] P3 J-'+d+' → '+(lastEv.summary||'').substring(0,20),'#ffd6a0');break;}
+              if(pEvts&&pEvts.length){
+                const cands=pEvts
+                  .filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime&&(e.location||'').trim())
+                  .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
+                if(cands.length){lastEv=cands[0];break;}
               }
             }
-            if(!originSource){originSource='domicile';log('    ['+slotT+'] Défaut → domicile/agence');}
+            if(!lastEv) useHome=true;
           }
         }
 
-        // ── Calculer originC depuis lastEv ──────────────────────────────
         let originC=null,originLbl='',prevRdv=null;
-        if(lastEv&&originSource!=='P2b'&&originSource!=='domicile'){
+        if(lastEv&&!useHome){
           const loc=(lastEv.location||'').trim();
           const locCPV=extractCPV(loc);
           const lastC=locCPV?gcache[locCPV]||null:null;
@@ -1172,33 +1179,28 @@ async function runSearch(){
           prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:!lastC&&!!loc,evDist};
           if(lastC){
             originC=lastC;
-            originLbl=originSource+' : '+(lastEv.summary||'').substring(0,25);
+            originLbl='Dernier RDV'+(lastEv.summary?' : '+lastEv.summary.substring(0,20):'');
           } else {
-            // RDV sans adresse géocodée → domicile/agence
             originC=agC||homeC;
             originLbl=agC?t.agency+' (RDV sans adresse)':'Domicile';
           }
         } else {
-          // P2b ou défaut → domicile/agence
           originC=homeC||agC;
-          originLbl=homeC?'Domicile':(t.agency||'Position inconnue');
+          originLbl=homeC?'Domicile':(t.agency||'');
         }
 
-        if(!originC){log('    ['+slotT+'] ✗ pas de coords origine','#f04040');continue;}
+        if(!originC){log('  ✗ Pas de position pour '+t.name,'#f57f17');continue;}
+        log('  Origine: '+originLbl);
 
         const travelTo=await osrmCached(originC,dc);
-        if(!travelTo){log('    ['+slotT+'] ✗ calcul trajet impossible','#f04040');continue;}
+        if(!travelTo)continue;
 
         const arrival=slot.from+travelTo.dur*1000;
         const endWork=arrival+dur*60000;
-        if(endWork>win.end){
-          log('    ['+slotT+'] ✗ fin '+ftime(endWork)+' > fin journée','#f57f17');
-          continue;
-        }
-        const arrT=ftime(arrival);
-        const endT=ftime(endWork);
-        log('    ['+slotT+'] ✓ '+fdist(travelTo.dist)+' ('+originSource+') arr='+arrT+' fin='+endT,'#4cde80');
+        const deadline=slot.nextTs?slot.nextTs-settings.margin*60000:win.end;
+        if(endWork>deadline)continue;
 
+        log('  ✓ '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur),'#4cde80');
         travelTo._from=originC; // store origin for OSRM enrichment
         const cand={
           t,
@@ -1274,17 +1276,16 @@ function addDestMarker(lat,lon,label){
   _markers.push(m);
 }
 
-function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel,highlighted){
+function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
   if(!_map)return;
   const cols=['#1a3aff','#0d7a3e','#c45c00','#8b1a8b','#c41a1a','#00838f','#5d4037','#2e7d32','#1565c0','#6a1b9a'];
   const col=cols[rank%cols.length];
   // Initiales du tech (2 lettres max)
   const ini2=tech.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-  const sz=highlighted?44:36,bdr=highlighted?'3px solid #FFD700':'2px solid #fff',shd=highlighted?'0 0 12px rgba(255,215,0,.7)':'0 2px 8px rgba(0,0,0,.35)';
   const icon=L.divIcon({
     className:'',
-    html:'<div style="background:'+col+';color:#fff;width:'+sz+'px;height:'+sz+'px;border-radius:50%;border:'+bdr+';box-shadow:'+shd+';display:flex;align-items:center;justify-content:center;font-size:'+(highlighted?13:11)+'px;font-weight:800;">'+ini2+'</div>',
-    iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
+    html:'<div style="background:'+col+';color:#fff;width:36px;height:36px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:-0.5px;">'+ini2+'</div>',
+    iconSize:[36,36],iconAnchor:[18,18]
   });
   const jitter=rank*0.0008;
   const m=L.marker([lat+jitter,lon+jitter],{icon}).addTo(_map);
@@ -1301,14 +1302,17 @@ function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel,highlight
 }
 
 function highlightTech(idx,lat,lon){
+  if(!_map||!lat||!lon)return;
+  _map.setView([lat,lon],13,{animate:true});
+  // Highlight la card
   document.querySelectorAll('.result-card').forEach((el,i)=>{
     el.style.outline=i===idx?'2px solid var(--accent)':'none';
   });
-  if(_lastResults&&_lastDc){updateMap(_lastDc,_lastResults,idx);}
-  if(_map&&lat&&lon)_map.setView([lat,lon],13,{animate:true});
+  // Ouvrir le popup du marker
+  if(_markers[idx+1])_markers[idx+1].openPopup();
 }
 
-function updateMap(dc,results,highlightedIdx){
+function updateMap(dc,results){
   if(!dc)return;
   if(typeof L==='undefined'){console.warn('Leaflet non chargé');return;}
   try{
@@ -1319,17 +1323,22 @@ function updateMap(dc,results,highlightedIdx){
     const bounds=[[dc.lat,dc.lon]];
     console.log('[MAP] dc=',dc.lat,dc.lon,'results=',results.length);
     let markerIdx=0;
-    results.forEach((r,ri)=>{
-      const orig=(r.slot&&r.slot.originCoords)||(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.t&&r.t._homeCoords);
-      if(!orig||!orig.lat||!orig.lon){markerIdx++;return;}
-      const slotLbl=fdate(r.win.date)+' · '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
-      const isHL=(ri===(highlightedIdx||0));
-      if(ri<3||isHL){
-        addTechMarker(orig.lat,orig.lon,r.t,markerIdx,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl,isHL);
-        bounds.push([orig.lat,orig.lon]);
+    results.forEach((r,i)=>{
+      const origCheck=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)||(r.slot&&r.slot.originCoords)||(r.t&&r.t._homeCoords);
+      console.log('[MAP] tech',i,r.t.name,'orig=',origCheck?origCheck.lat+','+origCheck.lon:'NULL');
+      // Utiliser originCoords (position du tech) OU coords du domicile en fallback
+      const orig=(r.slot&&r.slot.travelTo&&r.slot.travelTo._from)
+               ||(r.slot&&r.slot.originCoords)
+               ||(r.t&&r.t._homeCoords);
+      if(!orig||!orig.lat||!orig.lon){
+        // Pas de coords → placer quand même à la destination avec une note
+        markerIdx++; return;
       }
+      const slotLbl=fdate(r.win.date)+' · '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
+      addTechMarker(orig.lat,orig.lon,r.t,markerIdx,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
+      bounds.push([orig.lat,orig.lon]);
       markerIdx++;
-    });;
+    });
     if(bounds.length>1)_map.fitBounds(bounds,{padding:[50,50],maxZoom:12});
     else _map.setView([dc.lat,dc.lon],12);
     setTimeout(()=>_map&&_map.invalidateSize(),300);
@@ -1345,38 +1354,14 @@ function prog(pct,lbl){
 }
 function log(msg,color){
   color=color||'#8a8680';
-  const ts=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  _logHistory.push({msg,color,ts});
   const box=document.getElementById('logBox');
   if(!box)return;
+  const ts=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const line=document.createElement('div');
   line.style.cssText='font-family:IBM Plex Mono,monospace;font-size:11px;color:'+color+';padding:2px 0;border-bottom:1px solid #2a2a2a;';
   line.textContent='['+ts+'] '+msg;
   box.appendChild(line);
   box.scrollTop=box.scrollHeight;
-}
-
-function showLogs(){
-  const ra=document.getElementById('resultsArea');
-  const wrap=document.createElement('div');
-  wrap.style.cssText='background:#1a1916;border-radius:8px;padding:12px;margin:8px;max-height:400px;overflow-y:auto;';
-  const hdr=document.createElement('div');
-  hdr.style.cssText='display:flex;justify-content:space-between;margin-bottom:8px;';
-  const title=document.createElement('span');
-  title.style.cssText='color:#4cde80;font-family:IBM Plex Mono,monospace;font-size:11px;font-weight:700;';
-  title.textContent='LOGS ('+_logHistory.length+' lignes)';
-  const closeBtn=document.createElement('button');
-  closeBtn.textContent='✕';
-  closeBtn.style.cssText='background:none;border:none;color:#888;cursor:pointer;font-size:14px;';
-  closeBtn.onclick=function(){wrap.remove();};
-  hdr.appendChild(title);hdr.appendChild(closeBtn);wrap.appendChild(hdr);
-  _logHistory.forEach(function(l){
-    const line=document.createElement('div');
-    line.style.cssText='font-family:IBM Plex Mono,monospace;font-size:10px;color:'+l.color+';padding:2px 0;border-bottom:1px solid #2a2a2a;white-space:pre-wrap;word-break:break-all;';
-    line.textContent='['+l.ts+'] '+l.msg;
-    wrap.appendChild(line);
-  });
-  ra.appendChild(wrap);wrap.scrollTop=wrap.scrollHeight;
 }
 function alert2(type,msg){const icons={warn:'⚠',err:'✕',ok:'✓'};document.getElementById('searchAlert').innerHTML='<div class="alert alert-'+type+'">'+icons[type]+' '+msg+'</div>';}
 
@@ -1471,7 +1456,9 @@ function renderResults(res,total,errors,dest,dc,dur){
             +'<a href="'+calUrl+'" target="_blank" style="font-size:10px;color:#0d7a3e;background:var(--green-light);padding:3px 8px;border-radius:4px;font-weight:600;text-decoration:none;white-space:nowrap;">📅 Planning '+r.t.name.split(' ')[0]+' ↗</a>'
             +'<a href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route='+dc.lat+','+dc.lon+'" target="_blank" style="font-size:10px;color:var(--accent);text-decoration:none;white-space:nowrap;">🧭 Itinéraire ↗</a>'
             +'</div>';
-        })()    +'</div>';
+        })()
+      +'</div>'
+    +'</div>';
   });;
 
   h+='<div style="text-align:center;font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;padding:5px 0;">OSRM · OpenStreetMap · Nominatim — 100% gratuit</div>';
