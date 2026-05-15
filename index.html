@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v13.0</span>
+    <span class="app-ver">v14.0</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -545,6 +545,7 @@ function init(){
   buildAgencyPills();
   updateDelayInfo();
   updateTimePrev();
+  loadGeoCache();
   loadGAPI(); // clientId hardcodé, chargement auto
   document.addEventListener('click',e=>{if(!e.target.closest('.dest-wrap'))hideAC();});
 }
@@ -824,8 +825,31 @@ function setAuth(ok){
   document.getElementById('authBtn').textContent=ok?'Déconnecter':'Se connecter';
   const lb=document.getElementById('loadSheetBtn');
   if(lb)lb.disabled=!ok;
-  // Import automatique du Sheet à chaque connexion
-  if(ok) loadSheet();
+  if(ok){loadSheet();setTimeout(prefetchAgendas,3000);}
+}
+
+async function prefetchAgendas(){
+  if(!gToken||!technicians.length)return;
+  const wins=getDayWindows();
+  if(!wins.length)return;
+  const extraDates=new Set();
+  for(let d=1;d<=7;d++){
+    const prevD=new Date(wins[0].date);
+    prevD.setDate(wins[0].date.getDate()-d);
+    const ds=prevD.getFullYear()+'-'+String(prevD.getMonth()+1).padStart(2,'0')+'-'+String(prevD.getDate()).padStart(2,'0');
+    extraDates.add(ds);if(extraDates.size>=2)break;
+  }
+  const dates=[...extraDates,...wins.map(w=>w.dateStr)];
+  const tasks=[];
+  for(const t of technicians) for(const ds of dates) tasks.push({email:t.email,ds});
+  let done=0;const total=tasks.length;
+  for(let i=0;i<tasks.length;i+=6){
+    await Promise.all(tasks.slice(i,i+6).map(async({email,ds})=>{
+      try{await fetchEvents(email,ds);}catch(e){}done++;
+    }));
+    document.getElementById('authLabel').textContent='Connecté · cache '+Math.round(done/total*100)+'%';
+  }
+  document.getElementById('authLabel').textContent='Connecté ✓';
 }
 
 // ══════════════════════════════════════════════════
@@ -833,18 +857,20 @@ function setAuth(ok){
 // ══════════════════════════════════════════════════
 function toRFC3339(dateStr,timeStr){const d=new Date(dateStr+'T'+timeStr);const off=-d.getTimezoneOffset();const sign=off>=0?'+':'-';const hh=String(Math.floor(Math.abs(off)/60)).padStart(2,'0');const mm=String(Math.abs(off)%60).padStart(2,'0');return dateStr+'T'+timeStr+':00'+sign+hh+':'+mm;}
 async function fetchEvents(calId,dateStr){
+  const cached=loadCalCache(calId,dateStr);
+  if(cached!==null)return cached;
   const p=new URLSearchParams({timeMin:toRFC3339(dateStr,'00:00'),timeMax:toRFC3339(dateStr,'23:59'),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
   const doFetch=async()=>fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken}});
   let r=await doFetch();
-  // Token expiré → refresh silencieux et retry
   if(r.status===401){
-    console.log('[AUTH] 401 détecté, refresh token...');
     const ok=await refreshToken();
     if(ok){r=await doFetch();}
     else{throw new Error('Session expirée — veuillez vous reconnecter.');}
   }
   if(!r.ok){let d='';try{const j=await r.json();d=j?.error?.message||'';}catch(e){}throw new Error(r.status+(d?' : '+d:''));}
-  return (await r.json()).items||[];
+  const items=(await r.json()).items||[];
+  saveCalCache(calId,dateStr,items);
+  return items;
 }
 function rawFreeSlots(events,wStart,wEnd,durMin,marginMin){
   const minMs=durMin*60000;
@@ -866,6 +892,9 @@ function getLastEvBefore(events,ts){
 // ══════════════════════════════════════════════════
 const gcache={};
 let _nomTs=0;
+const GEO_KEY='dsp_geo';
+function loadGeoCache(){try{const r=localStorage.getItem(GEO_KEY);if(r){Object.assign(gcache,JSON.parse(r));console.log('[GEO] Cache:',Object.keys(gcache).length,'entrées');}}catch(e){}}
+function saveGeoCache(){try{localStorage.setItem(GEO_KEY,JSON.stringify(gcache));}catch(e){}}
 
 // Extrait CP+Ville depuis n'importe quelle adresse
 // Ex: "27 AVENUE DU GENERAL DE GAULLE, 83320 CARQUEIRANNE, FRANCE" -> "83320 CARQUEIRANNE"
@@ -902,11 +931,13 @@ async function geocode(addr){
     const d=await r.json();
     if(d&&d.length){
       const res={lat:+d[0].lat,lon:+d[0].lon,display:cpv,approx:true};
+      saveGeoCache();
       return gcache[cpv]=res;
     }
   }catch(e){}
 
   gcache[cpv]=null;
+  saveGeoCache();
   return null;
 }
 
@@ -1032,13 +1063,9 @@ async function runSearch(){
   // 4. Charger tous les agendas (séquentiel - Google Calendar rate-limit)
   prog(10,'Chargement agendas…');
   const errors=[];
-  const allEvts={}; // "email|dateStr" -> events[] | null
-
-  // Préparer les dates à charger: jours de la fenêtre + les 2 jours ouvrés précédents
-  // (pour trouver le dernier RDV avant le premier créneau)
+  const allEvts={};
   const extraDates=new Set();
   if(wins.length>0){
-    // Remonter jusqu'à 5 jours calendaires pour trouver 2 jours ouvrés
     for(let d=1;d<=7;d++){
       const prevD=new Date(wins[0].date);
       prevD.setDate(wins[0].date.getDate()-d);
@@ -1047,33 +1074,24 @@ async function runSearch(){
       if(extraDates.size>=2)break;
     }
   }
-
-  let calCount=0;
   const calDates=[...extraDates,...wins.map(w=>w.dateStr)];
   const calTotal=pool.length*calDates.length;
-
-  for(const t of pool){
-    // Charger les jours précédents (silencieux, pas d'erreur si indispo)
-    for(const ds of extraDates){
+  let calCount=0;
+  const tasks=[];
+  for(const t of pool) for(const ds of calDates) tasks.push({t,ds,isExtra:extraDates.has(ds)});
+  const BATCH=4;
+  for(let i=0;i<tasks.length;i+=BATCH){
+    await Promise.all(tasks.slice(i,i+BATCH).map(async({t,ds,isExtra})=>{
       const k=t.email+'|'+ds;
-      try{allEvts[k]=await fetchEvents(t.email,ds);}catch(e){allEvts[k]=[];}
-      calCount++;prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
-    }
-    // Charger les jours de la fenêtre (avec gestion d'erreur)
-    for(const win of wins){
-      const k=t.email+'|'+win.dateStr;
-      try{
-        allEvts[k]=await fetchEvents(t.email,win.dateStr);
-      }catch(e){
-        allEvts[k]=null;
-        const msg=e.message.includes('expirée')||e.message.includes('401')
-          ?t.name+' : session expirée (reconnexion en cours…)'
-          :t.name+' : agenda inaccessible ('+e.message+')';
-        if(!errors.find(x=>x.startsWith(t.name)))errors.push(msg);
+      try{allEvts[k]=await fetchEvents(t.email,ds);}
+      catch(e){
+        allEvts[k]=isExtra?[]:null;
+        if(!isExtra&&!errors.find(x=>x.startsWith(t.name)))
+          errors.push(t.name+' : agenda inaccessible ('+e.message+')');
       }
       calCount++;
       prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
-    }
+    }));
   }
   log('Agendas chargés','#4cde80');
 
@@ -1223,12 +1241,16 @@ async function runSearch(){
   });
   // Enrichir le top 10 avec vraies distances OSRM (routières)
   prog(95,'Calcul distances routières…');
-  const top=results.slice(0,15); // top 15 pour OSRM, on affiche top 10
-  for(const r of top){
+  const top=results.slice(0,15);
+  await Promise.all(top.map(async(r)=>{
     if(r.slot&&r.slot.travelTo&&r.slot.travelTo._from){
-      try{const orig=r.slot.travelTo._from;const real=await osrmReal(orig,dc);real._from=orig;r.travel=real;r.slot.travelTo=real;}catch(e){}
+      try{
+        const orig=r.slot.travelTo._from;
+        const real=await osrmReal(orig,dc);
+        real._from=orig;r.travel=real;r.slot.travelTo=real;
+      }catch(e){}
     }
-  }
+  }));
   // Re-trier avec vraies distances routières
   top.sort((a,b)=>{
     const da=a.travel.dist,db=b.travel.dist;
