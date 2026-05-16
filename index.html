@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v14.2</span>
+    <span class="app-ver">v14.3</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1031,8 +1031,9 @@ async function runSearch(){
   const dur=parseInt(document.getElementById('duration').value);
   document.getElementById('searchAlert').innerHTML='';
   // Vider le cache agendas pour avoir les données fraîches
-  // (le cache géo est conservé - les adresses ne changent pas)
   try{sessionStorage.removeItem(CAL_KEY);}catch(e){}
+  // Réinitialiser la carte
+  if(_map){clearMapMarkers();}
   if(!gToken)return alert2('err',"Connectez-vous d'abord à Google Calendar.");
   if(!destText)return alert2('warn','Saisissez une destination.');
   if(!technicians.length)return alert2('warn','Aucun technicien configuré.');
