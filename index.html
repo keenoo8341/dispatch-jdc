@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v15.2</span>
+    <span class="app-ver">v15.3</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1254,6 +1254,7 @@ async function runSearch(){
   });
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
+  log('Top: '+top.slice(0,5).map((r,i)=>'#'+(i+1)+' '+r.t.name.split(' ')[0]+' '+fdist(r.travel.dist)).join(' | '),'#4cde80');
   const topDisplay=top.slice(0,10);
   renderResults(topDisplay,results.length,errors,destText,dc,dur);
   updateMap(dc,topDisplay);
