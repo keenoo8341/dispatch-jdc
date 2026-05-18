@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v14.5</span>
+    <span class="app-ver">v14.6</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -844,6 +844,7 @@ async function prefetchAgendas(){
   for(const t of technicians) for(const ds of dates) tasks.push({email:t.email,ds});
   let done=0;const total=tasks.length;
   for(let i=0;i<tasks.length;i+=3){
+    if(_searching)break;
     await Promise.all(tasks.slice(i,i+3).map(async({email,ds})=>{
       try{await fetchEvents(email,ds);}catch(e){}done++;
     }));
@@ -1043,6 +1044,7 @@ async function geocodeDestination(q){
 async function runSearch(){
   const destText=document.getElementById('dest').value.trim();
   const dur=parseInt(document.getElementById('duration').value);
+  _searching=true;
   document.getElementById('searchAlert').innerHTML='';
   // Vider le cache agendas pour avoir les données fraîches
   try{sessionStorage.removeItem(CAL_KEY);}catch(e){}
@@ -1121,19 +1123,18 @@ async function runSearch(){
   let calCount=0;
   const tasks=[];
   for(const t of pool) for(const ds of calDates) tasks.push({t,ds,isExtra:extraDates.has(ds)});
-  const BATCH=3;
-  for(let i=0;i<tasks.length;i+=BATCH){
-    await Promise.all(tasks.slice(i,i+BATCH).map(async({t,ds,isExtra})=>{
-      const k=t.email+'|'+ds;
-      try{allEvts[k]=await fetchEvents(t.email,ds);}
-      catch(e){
-        allEvts[k]=isExtra?[]:null;
-        if(!isExtra&&!errors.find(x=>x.startsWith(t.name)))
-          errors.push(t.name+' : agenda inaccessible ('+(e.name==='AbortError'?'timeout':e.message)+')');
-      }
-      calCount++;
-      prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
-    }));
+  // Séquentiel fiable — le cache session accélère si prefetch déjà fait
+  for(const task of tasks){
+    const {t,ds,isExtra}=task;
+    const k=t.email+'|'+ds;
+    try{allEvts[k]=await fetchEvents(t.email,ds);}
+    catch(e){
+      allEvts[k]=isExtra?[]:null;
+      if(!isExtra&&!errors.find(x=>x.startsWith(t.name)))
+        errors.push(t.name+' : agenda inaccessible ('+(e.name==='AbortError'?'timeout':e.message)+')');
+    }
+    calCount++;
+    prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
   }
   log('Agendas chargés','#4cde80');
 
@@ -1301,7 +1302,8 @@ async function runSearch(){
   });
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
-  const topDisplay=top.slice(0,10);
+  _searching=false;
+  const topDisplay=top.slice(0,15);
   renderResults(topDisplay,results.length,errors,destText,dc,dur);
   updateMap(dc,topDisplay);
 }
