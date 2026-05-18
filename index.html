@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v15.3</span>
+    <span class="app-ver">v15.4</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1211,8 +1211,11 @@ async function runSearch(){
 
         const arrival=slot.from+travelTo.dur*1000;
         const endWork=arrival+dur*60000;
-        const deadline=slot.nextTs?slot.nextTs-settings.margin*60000:win.end;
-        if(endWork>deadline)continue;
+        // Seule contrainte : l'intervention se termine dans la fenêtre du jour
+        if(endWork>win.end){
+          log('  ✗ '+ftime(slot.from)+' → fin '+ftime(endWork)+' dépasse fin journée '+ftime(win.end),'#f57f17');
+          continue;
+        }
 
         log('  ✓ '+ftime(slot.from)+' → '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur)+' → résultat ajouté','#4cde80');
         travelTo._from=originC; // store origin for OSRM enrichment
