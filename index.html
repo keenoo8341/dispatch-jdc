@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v15.0</span>
+    <span class="app-ver">v15.1</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1222,11 +1222,13 @@ async function runSearch(){
     if(best)results.push(best);
   }
 
-  // Trier par haversine
+  log('Analyse terminée: '+results.length+' créneau(x) trouvé(s)');
+  // Trier : distance → date → nom alphabétique
   results.sort((a,b)=>{
     const da=a.travel.dist,db=b.travel.dist;
-    if(Math.abs(da-db)>500)return da-db;
-    return a.win.date-b.win.date;
+    if(Math.abs(da-db)>500)return da-db;       // >500m : distance prime
+    if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date; // même distance → date
+    return a.t.name.localeCompare(b.t.name,'fr'); // même date → ordre alphabétique
   });
   // Enrichir le top 10 avec vraies distances OSRM (routières)
   prog(95,'Calcul distances routières…');
@@ -1240,7 +1242,8 @@ async function runSearch(){
   top.sort((a,b)=>{
     const da=a.travel.dist,db=b.travel.dist;
     if(Math.abs(da-db)>500)return da-db;
-    return a.win.date-b.win.date;
+    if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date;
+    return a.t.name.localeCompare(b.t.name,'fr');
   });
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
