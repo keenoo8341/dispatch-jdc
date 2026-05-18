@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v14.6</span>
+    <span class="app-ver">v15.0</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -797,7 +797,7 @@ function initGSI(){
       clearTimeout(window._tokenRefreshTimer);
       window._tokenRefreshTimer=setTimeout(()=>{
         console.log('[AUTH] Token refresh automatique...');
-        tokenClient.requestAccessToken({prompt:'none'});
+        tokenClient.requestAccessToken({prompt:''});
       }, 55*60*1000);
     }
   });
@@ -815,7 +815,7 @@ async function refreshToken(){
       setAuth(true);
       resolve(true);
     };
-    tokenClient.requestAccessToken({prompt:'none'});
+    tokenClient.requestAccessToken({prompt:''});
   });
 }
 function handleAuth(){if(!clientId){alert('Configurez d\'abord votre Client ID.');return;}if(gToken){gToken=null;setAuth(false);return;}if(!tokenClient){loadGAPI();setTimeout(handleAuth,1500);return;}tokenClient.requestAccessToken();}
@@ -825,94 +825,32 @@ function setAuth(ok){
   document.getElementById('authBtn').textContent=ok?'Déconnecter':'Se connecter';
   const lb=document.getElementById('loadSheetBtn');
   if(lb)lb.disabled=!ok;
-  if(ok){loadSheet();setTimeout(prefetchAgendas,3000);}
-}
-
-async function prefetchAgendas(){
-  if(!gToken||!technicians.length)return;
-  const wins=getDayWindows();
-  if(!wins.length)return;
-  const extraDates=new Set();
-  for(let d=1;d<=7;d++){
-    const prevD=new Date(wins[0].date);
-    prevD.setDate(wins[0].date.getDate()-d);
-    const ds=prevD.getFullYear()+'-'+String(prevD.getMonth()+1).padStart(2,'0')+'-'+String(prevD.getDate()).padStart(2,'0');
-    extraDates.add(ds);if(extraDates.size>=2)break;
-  }
-  const dates=[...extraDates,...wins.map(w=>w.dateStr)];
-  const tasks=[];
-  for(const t of technicians) for(const ds of dates) tasks.push({email:t.email,ds});
-  let done=0;const total=tasks.length;
-  for(let i=0;i<tasks.length;i+=3){
-    if(_searching)break;
-    await Promise.all(tasks.slice(i,i+3).map(async({email,ds})=>{
-      try{await fetchEvents(email,ds);}catch(e){}done++;
-    }));
-    document.getElementById('authLabel').textContent='Connecté · cache '+Math.round(done/total*100)+'%';
-  }
-  document.getElementById('authLabel').textContent='Connecté ✓';
+  // Import automatique du Sheet à chaque connexion
+  if(ok) loadSheet();
 }
 
 // ══════════════════════════════════════════════════
 // CALENDAR
 // ══════════════════════════════════════════════════
 function toRFC3339(dateStr,timeStr){const d=new Date(dateStr+'T'+timeStr);const off=-d.getTimezoneOffset();const sign=off>=0?'+':'-';const hh=String(Math.floor(Math.abs(off)/60)).padStart(2,'0');const mm=String(Math.abs(off)%60).padStart(2,'0');return dateStr+'T'+timeStr+':00'+sign+hh+':'+mm;}
-
-// ── Cache agendas session (20 min) ──────────────────────────────────────
-const CAL_KEY='dsp_cal';
-const CAL_TTL=20*60*1000;
-function saveCalCache(calId,dateStr,events){
-  try{
-    const raw=sessionStorage.getItem(CAL_KEY)||'{}';
-    const obj=JSON.parse(raw);
-    obj[calId+'|'+dateStr]={ts:Date.now(),events};
-    sessionStorage.setItem(CAL_KEY,JSON.stringify(obj));
-  }catch(e){}
-}
-function loadCalCache(calId,dateStr){
-  try{
-    const raw=sessionStorage.getItem(CAL_KEY);
-    if(!raw)return null;
-    const entry=JSON.parse(raw)[calId+'|'+dateStr];
-    if(entry&&Date.now()-entry.ts<CAL_TTL)return entry.events;
-  }catch(e){}
-  return null;
-}
-
 async function fetchEvents(calId,dateStr){
-  const cached=loadCalCache(calId,dateStr);
-  if(cached!==null)return cached;
   const p=new URLSearchParams({timeMin:toRFC3339(dateStr,'00:00'),timeMax:toRFC3339(dateStr,'23:59'),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
-  const doFetch=async()=>{
-    const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),8000); // timeout 8s
-    try{
-      const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken},signal:ctrl.signal});
-      clearTimeout(tid);return r;
-    }catch(e){clearTimeout(tid);throw e;}
-  };
+  const doFetch=async()=>fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken}});
   let r=await doFetch();
+  // Token expiré → refresh silencieux et retry
   if(r.status===401){
+    console.log('[AUTH] 401 détecté, refresh token...');
     const ok=await refreshToken();
     if(ok){r=await doFetch();}
     else{throw new Error('Session expirée — veuillez vous reconnecter.');}
   }
   if(!r.ok){let d='';try{const j=await r.json();d=j?.error?.message||'';}catch(e){}throw new Error(r.status+(d?' : '+d:''));}
-  const items=(await r.json()).items||[];
-  saveCalCache(calId,dateStr,items);
-  return items;
+  return (await r.json()).items||[];
 }
 function rawFreeSlots(events,wStart,wEnd,durMin,marginMin){
   const minMs=durMin*60000;
-  const busy=events.filter(e=>e.start&&(e.start.dateTime||e.start.date))
-    .map(e=>{
-      // Événement avec heure précise
-      if(e.start.dateTime){
-        return {s:new Date(e.start.dateTime).getTime(),e:new Date(e.end.dateTime).getTime()+marginMin*60000};
-      }
-      // Événement toute la journée → bloque toute la fenêtre
-      return {s:wStart,e:wEnd};
-    })
+  const busy=events.filter(e=>e.start&&e.start.dateTime)
+    .map(e=>({s:new Date(e.start.dateTime).getTime(),e:new Date(e.end.dateTime).getTime()+marginMin*60000}))
     .sort((a,b)=>a.s-b.s);
   const slots=[];let cur=wStart;
   for(const b of busy){if(cur+minMs<=b.s)slots.push({from:cur,to:b.s,nextTs:b.s});cur=Math.max(cur,b.e);}
@@ -930,7 +868,7 @@ function getLastEvBefore(events,ts){
 const gcache={};
 let _nomTs=0;
 const GEO_KEY='dsp_geo';
-function loadGeoCache(){try{const r=localStorage.getItem(GEO_KEY);if(r){Object.assign(gcache,JSON.parse(r));console.log('[GEO] Cache:',Object.keys(gcache).length,'entrées');}}catch(e){}}
+function loadGeoCache(){try{const r=localStorage.getItem(GEO_KEY);if(r)Object.assign(gcache,JSON.parse(r));}catch(e){}}
 function saveGeoCache(){try{localStorage.setItem(GEO_KEY,JSON.stringify(gcache));}catch(e){}}
 
 // Extrait CP+Ville depuis n'importe quelle adresse
@@ -1044,12 +982,8 @@ async function geocodeDestination(q){
 async function runSearch(){
   const destText=document.getElementById('dest').value.trim();
   const dur=parseInt(document.getElementById('duration').value);
-  _searching=true;
   document.getElementById('searchAlert').innerHTML='';
-  // Vider le cache agendas pour avoir les données fraîches
-  try{sessionStorage.removeItem(CAL_KEY);}catch(e){}
-  // Réinitialiser la carte
-  if(_map){clearMapMarkers();}
+  if(_map)clearMapMarkers();
   if(!gToken)return alert2('err',"Connectez-vous d'abord à Google Calendar.");
   if(!destText)return alert2('warn','Saisissez une destination.');
   if(!technicians.length)return alert2('warn','Aucun technicien configuré.');
@@ -1087,9 +1021,7 @@ async function runSearch(){
     });
   }
   if(selectedAgency!=='ALL')pool=pool.filter(t=>(t.agency||'').trim()===selectedAgency);
-  log('Pool: '+pool.length+' tech(s) — '+pool.map(t=>t.name).join(', '));
   if(!pool.length){ra.innerHTML='';return alert2('warn','Aucun technicien pour ce service / cette agence.');}
-  log('Fenêtres: '+wins.length+' jour(s) ouvrés');
   const wins=getDayWindows();
   if(!wins.length){ra.innerHTML='';return alert2('warn','Aucun jour ouvré dans ce délai.');}
   log(pool.length+' techniciens · '+wins.length+' jour(s)');
@@ -1107,9 +1039,13 @@ async function runSearch(){
   // 4. Charger tous les agendas (séquentiel - Google Calendar rate-limit)
   prog(10,'Chargement agendas…');
   const errors=[];
-  const allEvts={};
+  const allEvts={}; // "email|dateStr" -> events[] | null
+
+  // Préparer les dates à charger: jours de la fenêtre + les 2 jours ouvrés précédents
+  // (pour trouver le dernier RDV avant le premier créneau)
   const extraDates=new Set();
   if(wins.length>0){
+    // Remonter jusqu'à 5 jours calendaires pour trouver 2 jours ouvrés
     for(let d=1;d<=7;d++){
       const prevD=new Date(wins[0].date);
       prevD.setDate(wins[0].date.getDate()-d);
@@ -1118,23 +1054,33 @@ async function runSearch(){
       if(extraDates.size>=2)break;
     }
   }
+
+  let calCount=0;
   const calDates=[...extraDates,...wins.map(w=>w.dateStr)];
   const calTotal=pool.length*calDates.length;
-  let calCount=0;
-  const tasks=[];
-  for(const t of pool) for(const ds of calDates) tasks.push({t,ds,isExtra:extraDates.has(ds)});
-  // Séquentiel fiable — le cache session accélère si prefetch déjà fait
-  for(const task of tasks){
-    const {t,ds,isExtra}=task;
-    const k=t.email+'|'+ds;
-    try{allEvts[k]=await fetchEvents(t.email,ds);}
-    catch(e){
-      allEvts[k]=isExtra?[]:null;
-      if(!isExtra&&!errors.find(x=>x.startsWith(t.name)))
-        errors.push(t.name+' : agenda inaccessible ('+(e.name==='AbortError'?'timeout':e.message)+')');
+
+  for(const t of pool){
+    // Charger les jours précédents (silencieux, pas d'erreur si indispo)
+    for(const ds of extraDates){
+      const k=t.email+'|'+ds;
+      try{allEvts[k]=await fetchEvents(t.email,ds);}catch(e){allEvts[k]=[];}
+      calCount++;prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
     }
-    calCount++;
-    prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
+    // Charger les jours de la fenêtre (avec gestion d'erreur)
+    for(const win of wins){
+      const k=t.email+'|'+win.dateStr;
+      try{
+        allEvts[k]=await fetchEvents(t.email,win.dateStr);
+      }catch(e){
+        allEvts[k]=null;
+        const msg=e.message.includes('expirée')||e.message.includes('401')
+          ?t.name+' : session expirée (reconnexion en cours…)'
+          :t.name+' : agenda inaccessible ('+e.message+')';
+        if(!errors.find(x=>x.startsWith(t.name)))errors.push(msg);
+      }
+      calCount++;
+      prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
+    }
   }
   log('Agendas chargés','#4cde80');
 
@@ -1191,7 +1137,7 @@ async function runSearch(){
         let useHome=false;
 
         if(!lastEv){
-          // P2a: RDV terminé avant le slot, le plus proche géo de la destination
+          // P2a: RDV terminé avant slot, le plus proche géo
           const terminated=evts.filter(e=>
             e.start&&e.start.dateTime&&(e.location||'').trim()&&
             new Date(e.end.dateTime).getTime()<=slot.from
@@ -1214,7 +1160,7 @@ async function runSearch(){
           if(hasFuture){
             useHome=true;
           } else {
-            // P3: veille (J-1) ou avant-veille (J-2) uniquement, avec adresse
+            // P3: J-1 ou J-2 uniquement, avec adresse
             for(let d=1;d<=2;d++){
               const pd=new Date(win.date);
               pd.setDate(win.date.getDate()-d);
@@ -1284,16 +1230,12 @@ async function runSearch(){
   });
   // Enrichir le top 10 avec vraies distances OSRM (routières)
   prog(95,'Calcul distances routières…');
-  const top=results.slice(0,15);
-  await Promise.all(top.map(async(r)=>{
+  const top=results.slice(0,15); // top 15 pour OSRM, on affiche top 10
+  for(const r of top){
     if(r.slot&&r.slot.travelTo&&r.slot.travelTo._from){
-      try{
-        const orig=r.slot.travelTo._from;
-        const real=await osrmReal(orig,dc);
-        real._from=orig;r.travel=real;r.slot.travelTo=real;
-      }catch(e){}
+      try{const orig=r.slot.travelTo._from;const real=await osrmReal(orig,dc);real._from=orig;r.travel=real;r.slot.travelTo=real;}catch(e){}
     }
-  }));
+  }
   // Re-trier avec vraies distances routières
   top.sort((a,b)=>{
     const da=a.travel.dist,db=b.travel.dist;
@@ -1302,8 +1244,7 @@ async function runSearch(){
   });
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
-  _searching=false;
-  const topDisplay=top.slice(0,15);
+  const topDisplay=top.slice(0,10);
   renderResults(topDisplay,results.length,errors,destText,dc,dur);
   updateMap(dc,topDisplay);
 }
