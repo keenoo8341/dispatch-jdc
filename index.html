@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v14.3</span>
+    <span class="app-ver">v14.4</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -896,8 +896,15 @@ async function fetchEvents(calId,dateStr){
 }
 function rawFreeSlots(events,wStart,wEnd,durMin,marginMin){
   const minMs=durMin*60000;
-  const busy=events.filter(e=>e.start&&e.start.dateTime)
-    .map(e=>({s:new Date(e.start.dateTime).getTime(),e:new Date(e.end.dateTime).getTime()+marginMin*60000}))
+  const busy=events.filter(e=>e.start&&(e.start.dateTime||e.start.date))
+    .map(e=>{
+      // Événement avec heure précise
+      if(e.start.dateTime){
+        return {s:new Date(e.start.dateTime).getTime(),e:new Date(e.end.dateTime).getTime()+marginMin*60000};
+      }
+      // Événement toute la journée → bloque toute la fenêtre
+      return {s:wStart,e:wEnd};
+    })
     .sort((a,b)=>a.s-b.s);
   const slots=[];let cur=wStart;
   for(const b of busy){if(cur+minMs<=b.s)slots.push({from:cur,to:b.s,nextTs:b.s});cur=Math.max(cur,b.e);}
@@ -1071,7 +1078,9 @@ async function runSearch(){
     });
   }
   if(selectedAgency!=='ALL')pool=pool.filter(t=>(t.agency||'').trim()===selectedAgency);
+  log('Pool: '+pool.length+' tech(s) — '+pool.map(t=>t.name).join(', '));
   if(!pool.length){ra.innerHTML='';return alert2('warn','Aucun technicien pour ce service / cette agence.');}
+  log('Fenêtres: '+wins.length+' jour(s) ouvrés');
   const wins=getDayWindows();
   if(!wins.length){ra.innerHTML='';return alert2('warn','Aucun jour ouvré dans ce délai.');}
   log(pool.length+' techniciens · '+wins.length+' jour(s)');
