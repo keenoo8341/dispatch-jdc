@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v15.1</span>
+    <span class="app-ver">v15.2</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -198,6 +198,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div style="display:flex;align-items:center;gap:10px;">
 <div class="auth-status"><div class="dot" id="authDot"></div><span id="authLabel" style="white-space:nowrap;">Non connecté</span></div>
     <button class="btn btn-primary btn-sm" id="authBtn" onclick="handleAuth()" style="white-space:nowrap;">Se connecter</button>
+    <button class="btn btn-secondary btn-sm" onclick="showLogs()" title="Voir les logs" style="white-space:nowrap;">📋 Logs</button>
   </div>
 </div>
 
@@ -426,6 +427,7 @@ function isWorkDay(date){
 // STATE
 // ══════════════════════════════════════════════════
 let gToken=null,technicians=[],settings={margin:15};
+let _logLines=[];
 let clientId='',selectedServices=new Set(['ALL']),selectedAgency='ALL',selectedPeriod='allday';
 let approxActive=false,approxHour=13,toleranceMin=270,delayDays=2;
 let destCoords=null,acSuggestions=[],acIndex=-1,acTimer=null;
@@ -983,6 +985,7 @@ async function runSearch(){
   const destText=document.getElementById('dest').value.trim();
   const dur=parseInt(document.getElementById('duration').value);
   document.getElementById('searchAlert').innerHTML='';
+  _logLines=[];
   if(_map)clearMapMarkers();
   if(!gToken)return alert2('err',"Connectez-vous d'abord à Google Calendar.");
   if(!destText)return alert2('warn','Saisissez une destination.');
@@ -1106,6 +1109,7 @@ async function runSearch(){
   for(let ti=0;ti<pool.length;ti++){
     const t=pool[ti];
     log('━━ '+t.name+' ('+(ti+1)+'/'+pool.length+')','#1a3aff');
+    log('  Fenêtres: '+wins.map(w=>w.dateStr).join(' | '));
     prog(65+Math.round((ti/pool.length)*30),t.name+'…');
 
     // Coords depuis cache (déjà géocodés)
@@ -1122,9 +1126,12 @@ async function runSearch(){
 
     for(const win of wins){
       const evts=allEvts[t.email+'|'+win.dateStr];
-      if(!evts)continue;
+      if(evts===null){log('  '+win.dateStr+' inaccessible','#f57f17');continue;}
+      if(!evts){log('  '+win.dateStr+' non chargé','#888');continue;}
+      log('  '+win.dateStr+' → '+evts.length+' event(s)');
 
       const raw=rawFreeSlots(evts,win.start,win.end,dur,settings.margin);
+      log('  '+win.dateStr+' → '+raw.length+' créneau(x) '+raw.map(s=>new Date(s.from).getHours()+'h'+String(new Date(s.from).getMinutes()).padStart(2,'0')).join(','));
       if(!raw.length)continue;
 
       for(const slot of raw){
@@ -1196,8 +1203,8 @@ async function runSearch(){
           originLbl=homeC?'Domicile':(t.agency||'');
         }
 
-        if(!originC){log('  ✗ Pas de position pour '+t.name,'#f57f17');continue;}
-        log('  Origine: '+originLbl);
+        if(!originC){log('  ✗ '+ftime(slot.from)+' pas de coords origine','#f04040');continue;}
+        log('  '+ftime(slot.from)+' → '+originLbl+' ('+fdist(haversine(originC,dc)*1000)+' haversine)');
 
         const travelTo=await osrmCached(originC,dc);
         if(!travelTo)continue;
@@ -1207,7 +1214,7 @@ async function runSearch(){
         const deadline=slot.nextTs?slot.nextTs-settings.margin*60000:win.end;
         if(endWork>deadline)continue;
 
-        log('  ✓ '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur),'#4cde80');
+        log('  ✓ '+ftime(slot.from)+' → '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur)+' → résultat ajouté','#4cde80');
         travelTo._from=originC; // store origin for OSRM enrichment
         const cand={
           t,
@@ -1364,14 +1371,25 @@ function prog(pct,lbl){
 }
 function log(msg,color){
   color=color||'#8a8680';
+  const ts=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  _logLines.push({ts,msg,color});
   const box=document.getElementById('logBox');
   if(!box)return;
-  const ts=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const line=document.createElement('div');
   line.style.cssText='font-family:IBM Plex Mono,monospace;font-size:11px;color:'+color+';padding:2px 0;border-bottom:1px solid #2a2a2a;';
   line.textContent='['+ts+'] '+msg;
   box.appendChild(line);
   box.scrollTop=box.scrollHeight;
+}
+
+function showLogs(){
+  // Ouvrir une nouvelle fenêtre avec tous les logs
+  const win=window.open('','_blank','width=800,height=600');
+  if(!win)return;
+  win.document.write('<html><head><title>Logs Dispatch</title><style>body{background:#1a1916;color:#8a8680;font-family:IBM Plex Mono,monospace;font-size:11px;padding:12px;}div{padding:2px 0;border-bottom:1px solid #2a2a2a;}</style></head><body>');
+  _logLines.forEach(l=>{win.document.write('<div style="color:'+l.color+';">['+l.ts+'] '+l.msg.replace(/</g,'&lt;')+'</div>');});
+  win.document.write('</body></html>');
+  win.document.close();
 }
 function alert2(type,msg){const icons={warn:'⚠',err:'✕',ok:'✓'};document.getElementById('searchAlert').innerHTML='<div class="alert alert-'+type+'">'+icons[type]+' '+msg+'</div>';}
 
