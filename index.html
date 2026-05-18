@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v15.4</span>
+    <span class="app-ver">v15.6</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -346,6 +346,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
           <div class="field-hint">Temps tampon après chaque RDV</div>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="saveSettings()">💾 Enregistrer</button>
+        <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="if(confirm('Vider le cache de géolocalisation ?')){localStorage.removeItem(GEO_KEY);Object.keys(gcache).forEach(k=>delete gcache[k]);alert('Cache géo vidé.');}">🗺 Vider cache géo</button>
       </div>
     </div>
 
@@ -1166,8 +1167,11 @@ async function runSearch(){
           );
           if(hasFuture){
             useHome=true;
+          } else if(evts.length===0){
+            // Aucun RDV ce jour → tech part de l'agence (pas du dernier RDV connu)
+            useHome=true;
           } else {
-            // P3: J-1 ou J-2 uniquement, avec adresse
+            // P3: J-1 seulement si le tech a des RDV ce jour (il était en déplacement)
             for(let d=1;d<=2;d++){
               const pd=new Date(win.date);
               pd.setDate(win.date.getDate()-d);
@@ -1199,8 +1203,9 @@ async function runSearch(){
             originLbl=agC?t.agency+' (RDV sans adresse)':'Domicile';
           }
         } else {
-          originC=homeC||agC;
-          originLbl=homeC?'Domicile':(t.agency||'');
+          // Sans RDV récent → agence (point de départ professionnel) puis domicile
+          originC=agC||homeC;
+          originLbl=agC?t.agency:'Domicile';
         }
 
         if(!originC){log('  ✗ '+ftime(slot.from)+' pas de coords origine','#f04040');continue;}
