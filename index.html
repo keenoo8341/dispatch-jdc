@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v14.4</span>
+    <span class="app-ver">v14.5</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -843,8 +843,8 @@ async function prefetchAgendas(){
   const tasks=[];
   for(const t of technicians) for(const ds of dates) tasks.push({email:t.email,ds});
   let done=0;const total=tasks.length;
-  for(let i=0;i<tasks.length;i+=6){
-    await Promise.all(tasks.slice(i,i+6).map(async({email,ds})=>{
+  for(let i=0;i<tasks.length;i+=3){
+    await Promise.all(tasks.slice(i,i+3).map(async({email,ds})=>{
       try{await fetchEvents(email,ds);}catch(e){}done++;
     }));
     document.getElementById('authLabel').textContent='Connecté · cache '+Math.round(done/total*100)+'%';
@@ -882,7 +882,14 @@ async function fetchEvents(calId,dateStr){
   const cached=loadCalCache(calId,dateStr);
   if(cached!==null)return cached;
   const p=new URLSearchParams({timeMin:toRFC3339(dateStr,'00:00'),timeMax:toRFC3339(dateStr,'23:59'),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
-  const doFetch=async()=>fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken}});
+  const doFetch=async()=>{
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),8000); // timeout 8s
+    try{
+      const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken},signal:ctrl.signal});
+      clearTimeout(tid);return r;
+    }catch(e){clearTimeout(tid);throw e;}
+  };
   let r=await doFetch();
   if(r.status===401){
     const ok=await refreshToken();
@@ -1114,7 +1121,7 @@ async function runSearch(){
   let calCount=0;
   const tasks=[];
   for(const t of pool) for(const ds of calDates) tasks.push({t,ds,isExtra:extraDates.has(ds)});
-  const BATCH=4;
+  const BATCH=3;
   for(let i=0;i<tasks.length;i+=BATCH){
     await Promise.all(tasks.slice(i,i+BATCH).map(async({t,ds,isExtra})=>{
       const k=t.email+'|'+ds;
@@ -1122,7 +1129,7 @@ async function runSearch(){
       catch(e){
         allEvts[k]=isExtra?[]:null;
         if(!isExtra&&!errors.find(x=>x.startsWith(t.name)))
-          errors.push(t.name+' : agenda inaccessible ('+e.message+')');
+          errors.push(t.name+' : agenda inaccessible ('+(e.name==='AbortError'?'timeout':e.message)+')');
       }
       calCount++;
       prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
