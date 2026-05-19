@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v15.6</span>
+    <span class="app-ver">v15.7</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1230,11 +1230,17 @@ async function runSearch(){
                 approxAddr:false,travelTo,prevRdv,originCoords:originC},
           win,travel:travelTo,originLbl
         };
-        if(!best||travelTo.dist<best.travel.dist)best=cand;
-        break;
+        // Garder le meilleur slot du jour (distance min)
+        if(!best||travelTo.dist<best.travel.dist){
+          best=cand;
+          log('  → meilleur slot ce jour: '+ftime(slot.from)+' '+fdist(travelTo.dist));
+        }
       }
     }
-    if(best)results.push(best);
+    if(best){
+      log('  ★ Retenu: '+ftime(best.slot.dep)+' '+fdist(best.travel.dist),'#4cde80');
+      results.push(best);
+    }
   }
 
   log('Analyse terminée: '+results.length+' créneau(x) trouvé(s)');
