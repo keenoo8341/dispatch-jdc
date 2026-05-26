@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v16.0</span>
+    <span class="app-ver">v16.1</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1238,10 +1238,10 @@ async function runSearch(){
 
         const arrival=slot.from+travelTo.dur*1000;
         const endWork=arrival+dur*60000;
-        // Seule contrainte : l'intervention se termine dans la fenêtre du jour
+        // Pas de contrainte horaire stricte : les techs peuvent finir après 18h
+        // On signale juste si ça dépasse 18h pour information
         if(endWork>win.end){
-          log('  ✗ '+ftime(slot.from)+' → fin '+ftime(endWork)+' dépasse fin journée '+ftime(win.end),'#f57f17');
-          continue;
+          log('  ⚠ '+ftime(slot.from)+' → fin '+ftime(endWork)+' (après 18h, heures sup)','#f57f17');
         }
 
         log('  ✓ '+ftime(slot.from)+' → '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur)+' → résultat ajouté','#4cde80');
