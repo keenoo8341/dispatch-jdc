@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v15.7</span>
+    <span class="app-ver">v15.8</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1121,11 +1121,12 @@ async function runSearch(){
     // Stocker sur le tech pour la carte
     t._homeCoords=homeC||agC;
 
-    let best=null;
     const techHasCalErr=errors.find(x=>x.startsWith(t.name));
     if(techHasCalErr)continue;
 
+    // Un résultat par JOUR par tech (le meilleur créneau du jour)
     for(const win of wins){
+      let best=null; // réinitialisé à chaque jour
       const evts=allEvts[t.email+'|'+win.dateStr];
       if(evts===null){log('  '+win.dateStr+' inaccessible','#f57f17');continue;}
       if(!evts){log('  '+win.dateStr+' non chargé','#888');continue;}
@@ -1236,10 +1237,12 @@ async function runSearch(){
           log('  → meilleur slot ce jour: '+ftime(slot.from)+' '+fdist(travelTo.dist));
         }
       }
-    }
-    if(best){
-      log('  ★ Retenu: '+ftime(best.slot.dep)+' '+fdist(best.travel.dist),'#4cde80');
-      results.push(best);
+      // Pousser le meilleur créneau de ce jour dans results
+      if(best){
+        log('  ★ '+win.dateStr+' retenu: '+ftime(best.slot.dep)+' '+fdist(best.travel.dist),'#4cde80');
+        results.push(best);
+        best=null; // reset pour le jour suivant
+      }
     }
   }
 
