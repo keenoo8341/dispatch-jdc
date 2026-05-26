@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v15.8</span>
+    <span class="app-ver">v16.0</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -1160,14 +1160,35 @@ async function runSearch(){
         }
 
         if(!lastEv){
-          // P2b: RDV futur dans les 3h → tech part de domicile/agence
-          const hasFuture=evts.some(e=>
-            e.start&&e.start.dateTime&&
-            new Date(e.start.dateTime).getTime()>slot.from&&
-            new Date(e.start.dateTime).getTime()<=slot.from+10800000
-          );
+          // P2b: RDV futur dans les 6h → utiliser son adresse si proche, sinon agence
+          let futureRdv=null;
+          let bestFutureDist=Infinity;
+          for(const ev of evts){
+            if(!ev.start||!ev.start.dateTime)continue;
+            const evStart=new Date(ev.start.dateTime).getTime();
+            if(evStart>slot.from&&evStart<=slot.from+21600000){ // 6h
+              // Prendre le RDV futur le plus proche géo de la destination
+              const loc=(ev.location||'').trim();
+              const cpv=extractCPV(loc);
+              const evC=cpv?gcache[cpv]:null;
+              if(evC&&dc){
+                const d=haversine(evC,dc);
+                if(d<bestFutureDist){bestFutureDist=d;futureRdv={ev,coords:evC,dist:d};}
+              } else if(!futureRdv) {
+                futureRdv={ev,coords:null,dist:Infinity};
+              }
+            }
+          }
+          const hasFuture=!!futureRdv;
           if(hasFuture){
-            useHome=true;
+            if(futureRdv&&futureRdv.coords&&futureRdv.dist<30){
+              // RDV futur proche de la destination (<30km) → partir de son adresse
+              lastEv=futureRdv.ev;
+              log('    P2b → RDV futur proche ('+fdist(futureRdv.dist*1000)+') utilisé comme origine');
+            } else {
+              // RDV futur loin → agence
+              useHome=true;
+            }
           } else if(evts.length===0){
             // Aucun RDV ce jour → tech part de l'agence (pas du dernier RDV connu)
             useHome=true;
@@ -1272,7 +1293,14 @@ async function runSearch(){
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
   log('Top: '+top.slice(0,5).map((r,i)=>'#'+(i+1)+' '+r.t.name.split(' ')[0]+' '+fdist(r.travel.dist)).join(' | '),'#4cde80');
-  const topDisplay=top.slice(0,10);
+  // Max 3 résultats par tech pour équilibrer la visibilité
+  const MAX_PER_TECH=3;
+  const techCount={};
+  const topDisplay=top.filter(r=>{
+    const n=r.t.name;
+    techCount[n]=(techCount[n]||0)+1;
+    return techCount[n]<=MAX_PER_TECH;
+  }).slice(0,15);
   renderResults(topDisplay,results.length,errors,destText,dc,dur);
   updateMap(dc,topDisplay);
 }
