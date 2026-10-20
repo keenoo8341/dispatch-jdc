@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v16.1</span>
+    <span class="app-ver">v17.0</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -836,19 +836,60 @@ function setAuth(ok){
 // CALENDAR
 // ══════════════════════════════════════════════════
 function toRFC3339(dateStr,timeStr){const d=new Date(dateStr+'T'+timeStr);const off=-d.getTimezoneOffset();const sign=off>=0?'+':'-';const hh=String(Math.floor(Math.abs(off)/60)).padStart(2,'0');const mm=String(Math.abs(off)%60).padStart(2,'0');return dateStr+'T'+timeStr+':00'+sign+hh+':'+mm;}
-async function fetchEvents(calId,dateStr){
-  const p=new URLSearchParams({timeMin:toRFC3339(dateStr,'00:00'),timeMax:toRFC3339(dateStr,'23:59'),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
-  const doFetch=async()=>fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+p,{headers:{Authorization:'Bearer '+gToken}});
-  let r=await doFetch();
-  // Token expiré → refresh silencieux et retry
-  if(r.status===401){
-    console.log('[AUTH] 401 détecté, refresh token...');
-    const ok=await refreshToken();
-    if(ok){r=await doFetch();}
-    else{throw new Error('Session expirée — veuillez vous reconnecter.');}
+// Un seul refresh partagé quand plusieurs requêtes parallèles reçoivent un 401
+let _refreshP=null;
+function refreshTokenShared(){
+  if(!_refreshP)_refreshP=refreshToken().finally(()=>{_refreshP=null;});
+  return _refreshP;
+}
+// GET Calendar avec refresh token (401) et backoff sur rate-limit (429 / 403 rateLimitExceeded)
+async function calGet(calId,params){
+  const url='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?'+params;
+  let refreshed=false;
+  for(let attempt=0;;attempt++){
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+gToken}});
+    if(r.status===401){
+      if(refreshed)throw new Error('Session expirée — veuillez vous reconnecter.');
+      console.log('[AUTH] 401 détecté, refresh token...');
+      refreshed=true;
+      if(!await refreshTokenShared())throw new Error('Session expirée — veuillez vous reconnecter.');
+      continue;
+    }
+    if((r.status===429||r.status===403)&&attempt<4){
+      let reason='';try{const j=await r.clone().json();reason=j?.error?.errors?.[0]?.reason||'';}catch(e){}
+      if(r.status===429||/rateLimit/i.test(reason)){await sleep(500*2**attempt+Math.random()*300);continue;}
+    }
+    if(!r.ok){let d='';try{const j=await r.json();d=j?.error?.message||'';}catch(e){}throw new Error(r.status+(d?' : '+d:''));}
+    return r.json();
   }
-  if(!r.ok){let d='';try{const j=await r.json();d=j?.error?.message||'';}catch(e){}throw new Error(r.status+(d?' : '+d:''));}
-  return (await r.json()).items||[];
+}
+// Charge TOUS les jours demandés en une seule requête (au lieu d'une par jour),
+// puis ventile les événements par jour avec la même règle de chevauchement que timeMin/timeMax.
+async function fetchEventsRange(calId,dates){
+  const sorted=[...dates].sort();
+  const base={timeMin:toRFC3339(sorted[0],'00:00'),timeMax:toRFC3339(sorted[sorted.length-1],'23:59'),singleEvents:'true',orderBy:'startTime',maxResults:'2500'};
+  let items=[],pageToken='';
+  do{
+    const p=new URLSearchParams(base);if(pageToken)p.set('pageToken',pageToken);
+    const d=await calGet(calId,p);
+    items=items.concat(d.items||[]);pageToken=d.nextPageToken||'';
+  }while(pageToken);
+  const out={};
+  for(const ds of dates){
+    const s=new Date(ds+'T00:00').getTime(),e=new Date(ds+'T23:59').getTime();
+    out[ds]=items.filter(ev=>{
+      if(ev.start&&ev.start.dateTime)return new Date(ev.start.dateTime).getTime()<e&&new Date(ev.end.dateTime).getTime()>s;
+      if(ev.start&&ev.start.date)return ev.start.date<=ds&&(ev.end&&ev.end.date?ev.end.date>ds:ev.start.date===ds);
+      return false;
+    });
+  }
+  return out;
+}
+// Exécute fn sur items avec au plus `limit` appels simultanés
+async function runPool(items,limit,fn){
+  let i=0;
+  const worker=async()=>{while(i<items.length){const idx=i++;await fn(items[idx],idx);}};
+  await Promise.all(Array.from({length:Math.min(limit,items.length)},worker));
 }
 function rawFreeSlots(events,wStart,wEnd,durMin,marginMin){
   const minMs=durMin*60000;
@@ -886,6 +927,40 @@ function extractCPV(addr){
   return cp?cp[0]:null;
 }
 
+// 1) api-adresse.data.gouv.fr (BAN) : commune officielle, pas de limite 1 req/s → parallélisable
+async function geocodeBAN(cpv){
+  const m=cpv.match(/^(\d{5})(?:\s+(.+))?$/);if(!m)return null;
+  const city=(m[2]||'').replace(/\bCEDEX\b.*$/i,'').trim();
+  const url='https://api-adresse.data.gouv.fr/search/?type=municipality&limit=1&q='
+    +encodeURIComponent(city.length>=3?city:m[1])+(city.length>=3?'&postcode='+m[1]:'');
+  try{
+    const r=await fetch(url);if(!r.ok)return null;
+    const f=((await r.json()).features||[])[0];
+    if(f){const [lon,lat]=f.geometry.coordinates;return{lat,lon,display:cpv,approx:true};}
+  }catch(e){}
+  return null;
+}
+// 2) Nominatim en secours, sérialisé (1 req/s max) même quand geocode() est appelé en parallèle
+let _nomChain=Promise.resolve();
+function geocodeNominatim(cpv){
+  const p=_nomChain.then(async()=>{
+    const wait=1200-(Date.now()-_nomTs);
+    if(wait>0)await sleep(wait);
+    _nomTs=Date.now();
+    try{
+      const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(cpv)+'&format=json&limit=1&countrycodes=fr';
+      const r=await fetch(url,{headers:{'Accept-Language':'fr'}});
+      const d=await r.json();
+      if(d&&d.length)return{lat:+d[0].lat,lon:+d[0].lon,display:cpv,approx:true};
+    }catch(e){}
+    return null;
+  });
+  _nomChain=p.catch(()=>{});
+  return p;
+}
+let _geoSaveT=null;
+function scheduleGeoSave(){clearTimeout(_geoSaveT);_geoSaveT=setTimeout(saveGeoCache,300);}
+const _geoPending={};
 // Geocode: TOUJOURS par CP+ville (simple, fiable, rapide)
 // Pour domicile/agence déjà formatés en "CP VILLE": direct
 async function geocode(addr){
@@ -897,26 +972,16 @@ async function geocode(addr){
 
   // Cache par CP+ville (clé courte et stable)
   if(gcache[cpv]!==undefined)return gcache[cpv];
+  // Même CP+ville déjà en cours de géocodage → partager la requête
+  if(_geoPending[cpv])return _geoPending[cpv];
 
-  // Throttle Nominatim
-  const wait=1200-(Date.now()-_nomTs);
-  if(wait>0)await sleep(wait);
-  _nomTs=Date.now();
-
-  try{
-    const url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(cpv)+'&format=json&limit=1&countrycodes=fr';
-    const r=await fetch(url,{headers:{'Accept-Language':'fr','User-Agent':'Dispatch-JDC/8.2'}});
-    const d=await r.json();
-    if(d&&d.length){
-      const res={lat:+d[0].lat,lon:+d[0].lon,display:cpv,approx:true};
-      saveGeoCache();
-      return gcache[cpv]=res;
-    }
-  }catch(e){}
-
-  gcache[cpv]=null;
-  saveGeoCache();
-  return null;
+  return _geoPending[cpv]=(async()=>{
+    const res=(await geocodeBAN(cpv))||(await geocodeNominatim(cpv));
+    gcache[cpv]=res;
+    delete _geoPending[cpv];
+    scheduleGeoSave();
+    return res;
+  })();
 }
 
 // geocodeT = alias
@@ -951,6 +1016,29 @@ async function osrmReal(from,to){
   // Fallback haversine si OSRM indisponible
   const km=haversine(from,to);
   return{dist:km*1000,dur:km/50*3600};
+}
+
+// OSRM /table : distances routières de N origines vers la destination en UNE requête
+// (mêmes valeurs que /route). Retourne Map "lat,lon" -> {dist,dur} ; origines manquantes = échec.
+async function osrmTable(origins,to){
+  const out=new Map();
+  const uniq=[...new Map(origins.map(o=>[o.lat+','+o.lon,o])).values()];
+  const CHUNK=90; // limite serveur démo : 100 coordonnées
+  const chunks=[];for(let i=0;i<uniq.length;i+=CHUNK)chunks.push(uniq.slice(i,i+CHUNK));
+  await Promise.all(chunks.map(async ch=>{
+    try{
+      const coords=[to,...ch].map(c=>c.lon+','+c.lat).join(';');
+      const src=ch.map((_,i)=>i+1).join(';');
+      const r=await fetch('https://router.project-osrm.org/table/v1/driving/'+coords+'?sources='+src+'&destinations=0&annotations=duration,distance');
+      const d=await r.json();
+      if(d.code!=='Ok')return;
+      ch.forEach((o,i)=>{
+        const dist=d.distances[i]&&d.distances[i][0],dur=d.durations[i]&&d.durations[i][0];
+        if(dist!=null&&dur!=null)out.set(o.lat+','+o.lon,{dist,dur});
+      });
+    }catch(e){}
+  }));
+  return out;
 }
 
 async function osrmCached(from,to){
@@ -1030,17 +1118,12 @@ async function runSearch(){
   if(!wins.length){ra.innerHTML='';return alert2('warn','Aucun jour ouvré dans ce délai.');}
   log(pool.length+' techniciens · '+wins.length+' jour(s)');
 
-  // 3. Précache domicile + agence (parallel par tech)
-  prog(5,'Positions techniciens…');
-  for(const t of pool){
-    await Promise.all([
-      t.address?geocode(t.address):Promise.resolve(null),
-      t.agency?geocode(t.agency):Promise.resolve(null)
-    ]);
-  }
-  log('Domiciles/agences géocodés','#4cde80');
+  // 3. Précache domicile + agence — lancé en tâche de fond, en parallèle des agendas
+  prog(5,'Positions techniciens + agendas…');
+  const techGeoP=runPool(pool.flatMap(t=>[t.address,t.agency]).filter(Boolean),8,a=>geocode(a))
+    .then(()=>log('Domiciles/agences géocodés','#4cde80'));
 
-  // 4. Charger tous les agendas (séquentiel - Google Calendar rate-limit)
+  // 4. Charger tous les agendas : 1 requête par tech (tous les jours d'un coup), 6 techs en parallèle
   prog(10,'Chargement agendas…');
   const errors=[];
   const allEvts={}; // "email|dateStr" -> events[] | null
@@ -1061,46 +1144,41 @@ async function runSearch(){
 
   let calCount=0;
   const calDates=[...extraDates,...wins.map(w=>w.dateStr)];
-  const calTotal=pool.length*calDates.length;
+  const calTotal=pool.length;
 
-  for(const t of pool){
-    // Charger les jours précédents (silencieux, pas d'erreur si indispo)
-    for(const ds of extraDates){
-      const k=t.email+'|'+ds;
-      try{allEvts[k]=await fetchEvents(t.email,ds);}catch(e){allEvts[k]=[];}
-      calCount++;prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
+  await runPool(pool,6,async t=>{
+    try{
+      const byDay=await fetchEventsRange(t.email,calDates);
+      for(const ds of calDates)allEvts[t.email+'|'+ds]=byDay[ds];
+    }catch(e){
+      // Jours précédents : silencieux ; jours de la fenêtre : erreur → tech exclu (comme avant)
+      for(const ds of extraDates)allEvts[t.email+'|'+ds]=[];
+      for(const win of wins)allEvts[t.email+'|'+win.dateStr]=null;
+      const msg=e.message.includes('expirée')||e.message.includes('401')
+        ?t.name+' : session expirée (reconnexion en cours…)'
+        :t.name+' : agenda inaccessible ('+e.message+')';
+      if(!errors.find(x=>x.startsWith(t.name)))errors.push(msg);
     }
-    // Charger les jours de la fenêtre (avec gestion d'erreur)
-    for(const win of wins){
-      const k=t.email+'|'+win.dateStr;
-      try{
-        allEvts[k]=await fetchEvents(t.email,win.dateStr);
-      }catch(e){
-        allEvts[k]=null;
-        const msg=e.message.includes('expirée')||e.message.includes('401')
-          ?t.name+' : session expirée (reconnexion en cours…)'
-          :t.name+' : agenda inaccessible ('+e.message+')';
-        if(!errors.find(x=>x.startsWith(t.name)))errors.push(msg);
-      }
-      calCount++;
-      prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
-    }
-  }
+    calCount++;
+    prog(10+Math.round((calCount/calTotal)*25),'Agenda '+calCount+'/'+calTotal);
+  });
   log('Agendas chargés','#4cde80');
 
-  // 5. Collecter toutes les adresses RDV uniques et les géocoder
+  // 5. Collecter toutes les adresses RDV uniques et les géocoder (CP+ville dédupliqués, en parallèle)
   const rdvSet=new Set();
   for(const evts of Object.values(allEvts)){
     if(!evts)continue;
     for(const e of evts){const loc=(e.location||'').trim();if(loc)rdvSet.add(loc);}
   }
-  log('Géocodage '+rdvSet.size+' adresse(s) RDV…');
+  const rdvCPV=[...new Set([...rdvSet].map(extractCPV).filter(Boolean))].filter(c=>gcache[c]===undefined);
+  log('Géocodage '+rdvSet.size+' adresse(s) RDV ('+rdvCPV.length+' commune(s) hors cache)…');
   let gi=0;
-  for(const addr of rdvSet){
-    await geocode(addr);
+  await runPool(rdvCPV,8,async c=>{
+    await geocode(c);
     gi++;
-    prog(35+Math.round((gi/rdvSet.size)*30),'Géo RDV '+gi+'/'+rdvSet.size);
-  }
+    prog(35+Math.round((gi/rdvCPV.length)*30),'Géo RDV '+gi+'/'+rdvCPV.length);
+  });
+  await techGeoP;
   log('Adresses RDV géocodées','#4cde80');
 
   // 6. Analyse en mémoire (zéro réseau)
@@ -1275,15 +1353,25 @@ async function runSearch(){
     if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date; // même distance → date
     return a.t.name.localeCompare(b.t.name,'fr'); // même date → ordre alphabétique
   });
-  // Enrichir le top 10 avec vraies distances OSRM (routières)
+  // Enrichir TOUS les résultats avec les vraies distances OSRM (routières) via une seule matrice
+  // (avant : 15 appels /route séquentiels sur le top haversine uniquement)
   prog(95,'Calcul distances routières…');
-  const top=results.slice(0,15); // top 15 pour OSRM, on affiche top 10
-  for(const r of top){
-    if(r.slot&&r.slot.travelTo&&r.slot.travelTo._from){
-      try{const orig=r.slot.travelTo._from;const real=await osrmReal(orig,dc);real._from=orig;r.travel=real;r.slot.travelTo=real;}catch(e){}
-    }
+  const origins=results.map(r=>r.slot&&r.slot.travelTo&&r.slot.travelTo._from).filter(Boolean);
+  const real=await osrmTable(origins,dc);
+  for(const r of results){
+    const orig=r.slot&&r.slot.travelTo&&r.slot.travelTo._from;
+    const rv=orig&&real.get(orig.lat+','+orig.lon);
+    if(rv){const tr={dist:rv.dist,dur:rv.dur,_from:orig};r.travel=tr;r.slot.travelTo=tr;}
   }
+  log('Distances routières: '+real.size+' origine(s) via OSRM','#4cde80');
   // Re-trier avec vraies distances routières
+  results.sort((a,b)=>{
+    const da=a.travel.dist,db=b.travel.dist;
+    if(Math.abs(da-db)>500)return da-db;
+    if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date;
+    return a.t.name.localeCompare(b.t.name,'fr');
+  });
+  const top=results.slice(0,15);
   top.sort((a,b)=>{
     const da=a.travel.dist,db=b.travel.dist;
     if(Math.abs(da-db)>500)return da-db;
@@ -1354,7 +1442,7 @@ function addTechMarker(lat,lon,tech,rank,distLabel,originLbl,slotLabel){
   const m=L.marker([lat+jitter,lon+jitter],{icon}).addTo(_map);
   m.bindPopup(
     '<div class="map-popup">'
-    +'<strong>'+(medal||'#'+(rank+1))+' '+tech.name+'</strong>'
+    +'<strong>'+(['🥇','🥈','🥉'][rank]||'#'+(rank+1))+' '+tech.name+'</strong>'
     +(tech.service?'<span style="font-size:10px;color:#888;"> · '+tech.service+'</span>':'')
     +'<div class="dist">'+distLabel+'</div>'
     +'<div style="font-size:10px;color:#888;">Depuis : '+originLbl+'</div>'
@@ -1419,12 +1507,24 @@ function log(msg,color){
   color=color||'#8a8680';
   const ts=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   _logLines.push({ts,msg,color});
+  _logQueue.push({ts,msg,color});
+  // Rendu groupé une fois par frame (évite un reflow par ligne de log)
+  if(!_logRaf)_logRaf=requestAnimationFrame(flushLog);
+}
+let _logQueue=[],_logRaf=0;
+function flushLog(){
+  _logRaf=0;
   const box=document.getElementById('logBox');
+  const q=_logQueue;_logQueue=[];
   if(!box)return;
-  const line=document.createElement('div');
-  line.style.cssText='font-family:IBM Plex Mono,monospace;font-size:11px;color:'+color+';padding:2px 0;border-bottom:1px solid #2a2a2a;';
-  line.textContent='['+ts+'] '+msg;
-  box.appendChild(line);
+  const frag=document.createDocumentFragment();
+  for(const l of q){
+    const line=document.createElement('div');
+    line.style.cssText='font-family:IBM Plex Mono,monospace;font-size:11px;color:'+l.color+';padding:2px 0;border-bottom:1px solid #2a2a2a;';
+    line.textContent='['+l.ts+'] '+l.msg;
+    frag.appendChild(line);
+  }
+  box.appendChild(frag);
   box.scrollTop=box.scrollHeight;
 }
 
