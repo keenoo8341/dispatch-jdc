@@ -1214,131 +1214,75 @@ async function runSearch(){
       log('  '+win.dateStr+' → '+raw.length+' créneau(x) '+raw.map(s=>new Date(s.from).getHours()+'h'+String(new Date(s.from).getMinutes()).padStart(2,'0')).join(','));
       if(!raw.length)continue;
 
+      // ── Logique gestionnaire de planning ──────────────────────────────
+      // Pour chaque créneau libre : point de départ (A) → client (D) → point suivant (B).
+      // Coût = détour kilométrique réel = d(A,D) + d(D,B) − d(A,B).
+      //  • Début de journée (aucun RDV avant) : le tech part de SON DOMICILE ou de
+      //    l'AGENCE (on retient le moins coûteux) et peut être chez le client dès l'ouverture.
+      //  • B = RDV suivant si présent, sinon retour domicile en fin de journée.
+      //  • Faisabilité : fin intervention + trajet vers RDV suivant ≤ début RDV suivant.
+      const evC=ev=>{const cpv=extractCPV((ev&&ev.location||'').trim());return cpv?gcache[cpv]||null:null;};
       for(const slot of raw){
-        // Chercher le meilleur RDV d'origine pour ce slot
-        // Priorité : 1) dernier RDV terminé avant le slot ce jour
-        //            2) RDV le plus proche géo ce jour (même après le slot)
-        //            3) dernier RDV des jours précédents
-        // P1: dernier RDV terminé avant le slot ce jour
-        let lastEv=getLastEvBefore(evts,slot.from);
-        let useHome=false;
-
-        if(!lastEv){
-          // P2a: RDV terminé avant slot, le plus proche géo
-          const terminated=evts.filter(e=>
-            e.start&&e.start.dateTime&&(e.location||'').trim()&&
-            new Date(e.end.dateTime).getTime()<=slot.from
-          );
-          let best2=Infinity;
-          for(const ev of terminated){
-            const cpv=extractCPV((ev.location||'').trim());
-            const evC=cpv?gcache[cpv]:null;
-            if(evC&&dc){const d=haversine(evC,dc);if(d<best2){best2=d;lastEv=ev;}}
-          }
-        }
-
-        if(!lastEv){
-          // P2b: RDV futur dans les 6h → utiliser son adresse si proche, sinon agence
-          let futureRdv=null;
-          let bestFutureDist=Infinity;
-          for(const ev of evts){
-            if(!ev.start||!ev.start.dateTime)continue;
-            const evStart=new Date(ev.start.dateTime).getTime();
-            if(evStart>slot.from&&evStart<=slot.from+21600000){ // 6h
-              // Prendre le RDV futur le plus proche géo de la destination
-              const loc=(ev.location||'').trim();
-              const cpv=extractCPV(loc);
-              const evC=cpv?gcache[cpv]:null;
-              if(evC&&dc){
-                const d=haversine(evC,dc);
-                if(d<bestFutureDist){bestFutureDist=d;futureRdv={ev,coords:evC,dist:d};}
-              } else if(!futureRdv) {
-                futureRdv={ev,coords:null,dist:Infinity};
-              }
-            }
-          }
-          const hasFuture=!!futureRdv;
-          if(hasFuture){
-            if(futureRdv&&futureRdv.coords&&futureRdv.dist<30){
-              // RDV futur proche de la destination (<30km) → partir de son adresse
-              lastEv=futureRdv.ev;
-              log('    P2b → RDV futur proche ('+fdist(futureRdv.dist*1000)+') utilisé comme origine');
-            } else {
-              // RDV futur loin → agence
-              useHome=true;
-            }
-          } else if(evts.length===0){
-            // Aucun RDV ce jour → tech part de l'agence (pas du dernier RDV connu)
-            useHome=true;
-          } else {
-            // P3: J-1 seulement si le tech a des RDV ce jour (il était en déplacement)
-            for(let d=1;d<=2;d++){
-              const pd=new Date(win.date);
-              pd.setDate(win.date.getDate()-d);
-              const pds=pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0');
-              const pEvts=allEvts[t.email+'|'+pds];
-              if(pEvts&&pEvts.length){
-                const cands=pEvts
-                  .filter(e=>e.start&&e.start.dateTime&&e.end&&e.end.dateTime&&(e.location||'').trim())
-                  .sort((a,b)=>new Date(b.end.dateTime)-new Date(a.end.dateTime));
-                if(cands.length){lastEv=cands[0];break;}
-              }
-            }
-            if(!lastEv) useHome=true;
-          }
-        }
-
-        let originC=null,originLbl='',prevRdv=null;
-        if(lastEv&&!useHome){
-          const loc=(lastEv.location||'').trim();
-          const locCPV=extractCPV(loc);
-          const lastC=locCPV?gcache[locCPV]||null:null;
-          const evDist=lastC&&dc?haversine(lastC,dc):null;
-          prevRdv={summary:lastEv.summary||'',rawAddr:loc,geocodeFailed:!lastC&&!!loc,evDist};
-          if(lastC){
-            originC=lastC;
-            originLbl='Dernier RDV'+(lastEv.summary?' : '+lastEv.summary.substring(0,20):'');
-          } else {
-            originC=agC||homeC;
-            originLbl=agC?t.agency+' (RDV sans adresse)':'Domicile';
-          }
+        const prevEv=getLastEvBefore(evts,slot.from);
+        const nextEv=slot.nextTs?evts.find(e=>e.start&&e.start.dateTime&&new Date(e.start.dateTime).getTime()===slot.nextTs)||null:null;
+        const startOfDay=!prevEv;
+        let prevRdv=null;
+        const origins=[];
+        if(prevEv){
+          const pc=evC(prevEv),loc=(prevEv.location||'').trim();
+          prevRdv={summary:prevEv.summary||'',rawAddr:loc,geocodeFailed:!pc&&!!loc,evDist:pc&&dc?haversine(pc,dc):null};
+          if(pc)origins.push({c:pc,lbl:'Dernier RDV'+(prevEv.summary?' : '+prevEv.summary.substring(0,20):'')});
+          else if(agC)origins.push({c:agC,lbl:t.agency+' (RDV sans adresse)'});
+          else if(homeC)origins.push({c:homeC,lbl:'Domicile (RDV sans adresse)'});
         } else {
-          // Sans RDV récent → agence (point de départ professionnel) puis domicile
-          originC=agC||homeC;
-          originLbl=agC?t.agency:'Domicile';
+          if(homeC)origins.push({c:homeC,lbl:'Domicile',home:true});
+          if(agC)origins.push({c:agC,lbl:t.agency,agency:true});
         }
+        if(!origins.length){log('  ✗ '+ftime(slot.from)+' pas de coords origine','#f04040');continue;}
+        // Point d'arrivée après l'intervention
+        let endC=null,endLbl='';
+        if(nextEv){endC=evC(nextEv);endLbl='RDV suivant';}
+        else{endC=homeC||agC;endLbl='Retour domicile';}
 
-        if(!originC){log('  ✗ '+ftime(slot.from)+' pas de coords origine','#f04040');continue;}
-        log('  '+ftime(slot.from)+' → '+originLbl+' ('+fdist(haversine(originC,dc)*1000)+' haversine)');
-
-        const travelTo=await osrmCached(originC,dc);
-        if(!travelTo)continue;
-
-        const arrival=slot.from+travelTo.dur*1000;
-        const endWork=arrival+dur*60000;
-        // Pas de contrainte horaire stricte : les techs peuvent finir après 18h
-        // On signale juste si ça dépasse 18h pour information
-        if(endWork>win.end){
-          log('  ⚠ '+ftime(slot.from)+' → fin '+ftime(endWork)+' (après 18h, heures sup)','#f57f17');
+        let bestO=null;
+        for(const o of origins){
+          const legA=await osrmCached(o.c,dc);
+          if(!legA)continue;
+          const legB=endC?await osrmCached(dc,endC):null;
+          const base=endC?await osrmCached(o.c,endC):null;
+          // Début de journée : RDV possible dès l'ouverture (départ anticipé du domicile/agence)
+          const arrival=startOfDay?slot.from:slot.from+legA.dur*1000;
+          const dep=arrival-legA.dur*1000;
+          const endWork=arrival+dur*60000;
+          if(slot.nextTs){
+            const need=endWork+(legB?legB.dur*1000:0);
+            if(need>slot.nextTs){log('  ✗ '+ftime(slot.from)+' depuis '+o.lbl+' : trop juste avant RDV suivant','#888');continue;}
+          }
+          const cost=legA.dist+(legB?legB.dist:0)-(base?base.dist:0);
+          // Début de journée : le tech démarre de la zone (domicile OU agence) la plus proche du client
+          const better=!bestO||(startOfDay?legA.dist<bestO.legA.dist:cost<bestO.cost);
+          if(better)bestO={o,legA,legB,base,arrival,dep,endWork,cost};
         }
-
-        log('  ✓ '+ftime(slot.from)+' → '+fdist(travelTo.dist)+' / '+fdur(travelTo.dur)+' → résultat ajouté','#4cde80');
-        travelTo._from=originC; // store origin for OSRM enrichment
+        if(!bestO)continue;
+        const {o,legA,arrival,dep,endWork,cost}=bestO;
+        if(endWork>win.end)log('  ⚠ '+ftime(slot.from)+' → fin '+ftime(endWork)+' (après 18h, heures sup)','#f57f17');
+        log('  ✓ '+ftime(arrival)+' depuis '+o.lbl+' → '+fdist(legA.dist)+' / détour '+fdist(Math.max(0,cost))+' ('+endLbl+')','#4cde80');
+        const travelTo={dist:legA.dist,dur:legA.dur,_from:o.c};
         const cand={
           t,
-          slot:{from:arrival,to:endWork,dep:slot.from,originLabel:originLbl,
-                approxAddr:false,travelTo,prevRdv,originCoords:originC},
-          win,travel:travelTo,originLbl
+          slot:{from:arrival,to:endWork,dep,originLabel:o.lbl,
+                approxAddr:false,travelTo,prevRdv,originCoords:o.c},
+          win,travel:travelTo,originLbl:o.lbl,cost,_costRest:cost-legA.dist
         };
-        // Garder le meilleur slot du jour (distance min)
-        if(!best||travelTo.dist<best.travel.dist){
+        // Meilleur créneau du jour = détour minimal (puis le plus tôt)
+        if(!best||cost<best.cost-500||(Math.abs(cost-best.cost)<=500&&arrival<best.slot.from)){
           best=cand;
-          log('  → meilleur slot ce jour: '+ftime(slot.from)+' '+fdist(travelTo.dist));
+          log('  → meilleur slot ce jour: '+ftime(arrival)+' détour '+fdist(Math.max(0,cost)));
         }
       }
       // Pousser le meilleur créneau de ce jour dans results
       if(best){
-        log('  ★ '+win.dateStr+' retenu: '+ftime(best.slot.dep)+' '+fdist(best.travel.dist),'#4cde80');
+        log('  ★ '+win.dateStr+' retenu: '+ftime(best.slot.from)+' détour '+fdist(Math.max(0,best.cost)),'#4cde80');
         results.push(best);
         best=null; // reset pour le jour suivant
       }
@@ -1348,7 +1292,7 @@ async function runSearch(){
   log('Analyse terminée: '+results.length+' créneau(x) trouvé(s)');
   // Trier : distance → date → nom alphabétique
   results.sort((a,b)=>{
-    const da=a.travel.dist,db=b.travel.dist;
+    const da=a.cost,db=b.cost;
     if(Math.abs(da-db)>500)return da-db;       // >500m : distance prime
     if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date; // même distance → date
     return a.t.name.localeCompare(b.t.name,'fr'); // même date → ordre alphabétique
@@ -1361,26 +1305,26 @@ async function runSearch(){
   for(const r of results){
     const orig=r.slot&&r.slot.travelTo&&r.slot.travelTo._from;
     const rv=orig&&real.get(orig.lat+','+orig.lon);
-    if(rv){const tr={dist:rv.dist,dur:rv.dur,_from:orig};r.travel=tr;r.slot.travelTo=tr;}
+    if(rv){const tr={dist:rv.dist,dur:rv.dur,_from:orig};r.travel=tr;r.slot.travelTo=tr;r.cost=r._costRest+rv.dist;}
   }
   log('Distances routières: '+real.size+' origine(s) via OSRM','#4cde80');
   // Re-trier avec vraies distances routières
   results.sort((a,b)=>{
-    const da=a.travel.dist,db=b.travel.dist;
+    const da=a.cost,db=b.cost;
     if(Math.abs(da-db)>500)return da-db;
     if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date;
     return a.t.name.localeCompare(b.t.name,'fr');
   });
   const top=results.slice(0,15);
   top.sort((a,b)=>{
-    const da=a.travel.dist,db=b.travel.dist;
+    const da=a.cost,db=b.cost;
     if(Math.abs(da-db)>500)return da-db;
     if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date;
     return a.t.name.localeCompare(b.t.name,'fr');
   });
   prog(100,'Terminé');
   log('Terminé — '+results.length+' résultat(s)','#4cde80');
-  log('Top: '+top.slice(0,5).map((r,i)=>'#'+(i+1)+' '+r.t.name.split(' ')[0]+' '+fdist(r.travel.dist)).join(' | '),'#4cde80');
+  log('Top: '+top.slice(0,5).map((r,i)=>'#'+(i+1)+' '+r.t.name.split(' ')[0]+' détour '+fdist(Math.max(0,r.cost))).join(' | '),'#4cde80');
   // Max 3 résultats par tech pour équilibrer la visibilité
   const MAX_PER_TECH=3;
   const techCount={};
@@ -1571,6 +1515,7 @@ function renderResults(res,total,errors,dest,dc,dur){
     const distBadge=r.travel
       ?'<span style="font-size:15px;font-weight:800;color:var(--accent);">'+fdist(r.travel.dist)+'</span>'
        +'<span style="font-size:10px;color:var(--muted);display:block;">'+fdur(r.travel.dur)+'</span>'
+       +(r.cost!=null?'<span style="font-size:10px;color:var(--muted);display:block;" title="Km supplémentaires réels : aller + vers point suivant − trajet déjà prévu">détour '+fdist(Math.max(0,r.cost))+'</span>':'')
       :'—';
 
     // RDV précédent block
