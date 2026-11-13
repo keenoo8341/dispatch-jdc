@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v18.0</span>
+    <span class="app-ver">v18.1</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -432,6 +432,8 @@ let _logLines=[];
 let clientId='',selectedServices=new Set(['ALL']),selectedAgency='ALL',selectedPeriod='allday';
 let approxActive=false,approxHour=13,toleranceMin=270,delayDays=2;
 let destCoords=null,acSuggestions=[],acIndex=-1,acTimer=null;
+// API Adresse (BAN) : api-adresse.data.gouv.fr a été arrêtée, transférée à l'IGN (Géoplateforme) — même format GeoJSON
+const GEO_API='https://data.geopf.fr/geocodage/search';
 const PERIODS={morning:{start:9,end:12},afternoon:{start:14,end:18},allday:{start:9,end:18}};
 const COLORS=['#1a3aff','#0d7a3e','#c45c00','#8b1a8b','#c41a1a','#00838f','#5d4037','#2e7d32','#1565c0','#6a1b9a','#ad1457','#00695c','#f57f17','#37474f','#4e342e'];
 
@@ -574,13 +576,13 @@ function showPage(id,el){
 function onDestInput(){
   destCoords=null;document.getElementById('destConfirm').textContent='';
   const q=document.getElementById('dest').value.trim();
-  if(q.length<2){hideAC();return;}
+  if(q.length<3){hideAC();return;} // l'API refuse q < 3 caractères (HTTP 400)
   clearTimeout(acTimer);acTimer=setTimeout(()=>fetchAC(q),350);
 }
 async function fetchAC(q){
   try{
-    // api-adresse.data.gouv.fr : gère adresses complètes, accents, abréviations
-    const url='https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=8&autocomplete=1';
+    // Géoplateforme (ex-API Adresse) : gère adresses complètes, accents, abréviations
+    const url=GEO_API+'?q='+encodeURIComponent(q)+'&limit=8&autocomplete=1';
     const r=await fetch(url);
     const d=await r.json();
     acSuggestions=d.features||[];
@@ -912,7 +914,8 @@ function getLastEvBefore(events,ts){
 const gcache={};
 let _nomTs=0;
 const GEO_KEY='dsp_geo';
-function loadGeoCache(){try{const r=localStorage.getItem(GEO_KEY);if(r)Object.assign(gcache,JSON.parse(r));}catch(e){}}
+// Les échecs (null) ne sont pas rechargés : sinon une panne d'API passée bloque une ville pour toujours
+function loadGeoCache(){try{const r=localStorage.getItem(GEO_KEY);if(r){const o=JSON.parse(r);for(const k in o)if(o[k])gcache[k]=o[k];}}catch(e){}}
 function saveGeoCache(){try{localStorage.setItem(GEO_KEY,JSON.stringify(gcache));}catch(e){}}
 
 // Extrait CP+Ville depuis n'importe quelle adresse
@@ -927,11 +930,11 @@ function extractCPV(addr){
   return cp?cp[0]:null;
 }
 
-// 1) api-adresse.data.gouv.fr (BAN) : commune officielle, pas de limite 1 req/s → parallélisable
+// 1) Géoplateforme IGN (BAN) : commune officielle, pas de limite 1 req/s → parallélisable
 async function geocodeBAN(cpv){
   const m=cpv.match(/^(\d{5})(?:\s+(.+))?$/);if(!m)return null;
   const city=(m[2]||'').replace(/\bCEDEX\b.*$/i,'').trim();
-  const url='https://api-adresse.data.gouv.fr/search/?type=municipality&limit=1&q='
+  const url=GEO_API+'?type=municipality&limit=1&q='
     +encodeURIComponent(city.length>=3?city:m[1])+(city.length>=3?'&postcode='+m[1]:'');
   try{
     const r=await fetch(url);if(!r.ok)return null;
@@ -1055,9 +1058,9 @@ async function osrmCached(from,to){
 // Géocodage destination — utilise gouv.fr (adresses complètes) puis Nominatim
 async function geocodeDestination(q){
   if(!q||q.length<2)return null;
-  // 1. api-adresse.data.gouv.fr
+  // 1. Géoplateforme IGN (BAN)
   try{
-    const r=await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=1&autocomplete=0');
+    const r=await fetch(GEO_API+'?q='+encodeURIComponent(q)+'&limit=1&autocomplete=0');
     const d=await r.json();
     if(d.features&&d.features.length>0){
       const f=d.features[0];
