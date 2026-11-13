@@ -189,7 +189,7 @@ body{font-family:'Familjen Grotesk',sans-serif;background:var(--bg);color:var(--
   <div class="topbar-left">
     <div class="logo-mark">📡</div>
     <span class="app-name">Dispatch</span>
-    <span class="app-ver">v18.1</span>
+    <span class="app-ver">v18.2</span>
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('dispatch',this)">🔍 Recherche</button>
@@ -443,6 +443,8 @@ const fdur=s=>{const h=Math.floor(s/3600),m=Math.round((s%3600)/60);return h?h+'
 const fdist=m=>m>=1000?(m/1000).toFixed(1)+' km':Math.round(m)+' m';
 const ftime=ts=>new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 const fdate=d=>d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+// Échappement HTML des textes venant des agendas (titres/lieux d'invitations externes) avant innerHTML
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ini=n=>n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
 
 // ══════════════════════════════════════════════════
@@ -1007,7 +1009,6 @@ function haversine(a,b){
   return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
 // Distance instantanée (haversine) — utilisée pour le tri, zéro réseau
-const _osrmCache={};
 // OSRM réel — appel réseau, retourne distance et durée routières
 async function osrmReal(from,to){
   try{
@@ -1021,37 +1022,49 @@ async function osrmReal(from,to){
   return{dist:km*1000,dur:km/50*3600};
 }
 
-// OSRM /table : distances routières de N origines vers la destination en UNE requête
-// (mêmes valeurs que /route). Retourne Map "lat,lon" -> {dist,dur} ; origines manquantes = échec.
-async function osrmTable(origins,to){
-  const out=new Map();
-  const uniq=[...new Map(origins.map(o=>[o.lat+','+o.lon,o])).values()];
-  const CHUNK=90; // limite serveur démo : 100 coordonnées
-  const chunks=[];for(let i=0;i<uniq.length;i+=CHUNK)chunks.push(uniq.slice(i,i+CHUNK));
-  await Promise.all(chunks.map(async ch=>{
-    try{
-      const coords=[to,...ch].map(c=>c.lon+','+c.lat).join(';');
-      const src=ch.map((_,i)=>i+1).join(';');
-      const r=await fetch('https://router.project-osrm.org/table/v1/driving/'+coords+'?sources='+src+'&destinations=0&annotations=duration,distance');
-      const d=await r.json();
-      if(d.code!=='Ok')return;
-      ch.forEach((o,i)=>{
-        const dist=d.distances[i]&&d.distances[i][0],dur=d.durations[i]&&d.durations[i][0];
-        if(dist!=null&&dur!=null)out.set(o.lat+','+o.lon,{dist,dur});
-      });
-    }catch(e){}
-  }));
-  return out;
+// ── Distances routières : UNE matrice OSRM calculée AVANT l'analyse ──────────
+// Les 3 jambes d'un candidat (aller, vers le point suivant, trajet déjà prévu) viennent de la
+// même source → détour, heures de départ/arrivée et faisabilité cohérents entre eux.
+const _road=new Map(); // "lat,lon|lat,lon" -> {dist (m), dur (s)}
+const ptKey=c=>c.lat.toFixed(5)+','+c.lon.toFixed(5);
+const OSRM_MAX=100;       // limite du serveur de démo : 100 coordonnées par requête
+const ROAD_FACTOR=1.3;    // secours si OSRM indisponible : vol d'oiseau × 1.3 …
+const EST_KMH=60;         // … parcouru à 60 km/h
+async function osrmTableReq(coords,src,dst){
+  let url='https://router.project-osrm.org/table/v1/driving/'+coords.map(c=>c.lon.toFixed(5)+','+c.lat.toFixed(5)).join(';')+'?annotations=duration,distance';
+  if(src)url+='&sources='+src.join(';');
+  if(dst)url+='&destinations='+dst.join(';');
+  const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),15000); // jamais bloquer la recherche
+  try{const r=await fetch(url,{signal:ctl.signal});if(!r.ok)return null;const d=await r.json();return d.code==='Ok'?d:null;}
+  catch(e){return null;}finally{clearTimeout(to);}
 }
-
-async function osrmCached(from,to){
-  const key=from.lat.toFixed(3)+','+from.lon.toFixed(3)+'|'+to.lat.toFixed(3)+','+to.lon.toFixed(3);
-  if(_osrmCache[key])return _osrmCache[key];
-  // Haversine: instantané, pas de réseau
-  const km=haversine(from,to);
-  // Estimation durée: 50 km/h moyenne
-  const r={dist:km*1000, dur:km/50*3600, approx:true};
-  return _osrmCache[key]=r;
+// Remplit _road pour toutes les paires de points. ≤100 points : 1 requête ; au-delà : blocs 50×50
+// envoyés un par un (politique du serveur de démo : pas de rafale). Retourne le nb de requêtes.
+async function buildRoadMatrix(points){
+  const pts=[...new Map(points.filter(p=>p&&isFinite(p.lat)&&isFinite(p.lon)).map(p=>[ptKey(p),p])).values()];
+  if(pts.length<2)return 0;
+  const store=(d,S,D)=>S.forEach((s,i)=>D.forEach((t,j)=>{
+    const dist=d.distances&&d.distances[i]&&d.distances[i][j],dur=d.durations&&d.durations[i]&&d.durations[i][j];
+    if(dist!=null&&dur!=null)_road.set(ptKey(s)+'|'+ptKey(t),{dist,dur});
+  }));
+  if(pts.length<=OSRM_MAX){const d=await osrmTableReq(pts);if(d)store(d,pts,pts);return 1;}
+  const H=OSRM_MAX/2,ch=[];for(let i=0;i<pts.length;i+=H)ch.push(pts.slice(i,i+H));
+  let n=0;
+  for(const S of ch)for(const D of ch){
+    if(n++)await sleep(1000);
+    const coords=S===D?S:[...S,...D];
+    const d=await osrmTableReq(coords,S.map((_,i)=>i),D.map((_,j)=>S===D?j:S.length+j));
+    if(d)store(d,S,D);
+  }
+  return n;
+}
+function roadLeg(a,b){return ptKey(a)===ptKey(b)?{dist:0,dur:0}:(_road.get(ptKey(a)+'|'+ptKey(b))||null);}
+function estLeg(a,b){const km=haversine(a,b)*ROAD_FACTOR;return{dist:km*1000,dur:km/EST_KMH*3600,approx:true};}
+// Jambes d'un candidat : toutes OSRM, sinon toutes estimées (jamais un mélange des deux)
+function legsFor(o,d,e){
+  const A=roadLeg(o,d),B=e?roadLeg(d,e):null,C=e?roadLeg(o,e):null;
+  if(A&&(!e||(B&&C)))return{legA:A,legB:B,base:C,approx:false};
+  return{legA:estLeg(o,d),legB:e?estLeg(d,e):null,base:e?estLeg(o,e):null,approx:true};
 }
 
 
@@ -1184,15 +1197,26 @@ async function runSearch(){
   await techGeoP;
   log('Adresses RDV géocodées','#4cde80');
 
+  // 5b. Matrice routière OSRM de tous les points utiles (destination, domiciles, agences, RDV)
+  prog(65,'Distances routières…');
+  const ptsRoad=[dc];
+  for(const t of pool)for(const a of [t.address,t.agency]){const c=a?gcache[extractCPV(a)||'']:null;if(c)ptsRoad.push(c);}
+  for(const win of wins)for(const t of pool){
+    const evts=allEvts[t.email+'|'+win.dateStr];if(!evts)continue;
+    for(const e of evts){const c=gcache[extractCPV((e.location||'').trim())||''];if(c)ptsRoad.push(c);}
+  }
+  const nReq=await buildRoadMatrix(ptsRoad);
+  log('Distances routières OSRM : '+_road.size+' paire(s), '+nReq+' requête(s)'+(_road.size?'':' — OSRM indisponible, estimation vol d\'oiseau ×'+ROAD_FACTOR),_road.size?'#4cde80':'#f57f17');
+
   // 6. Analyse en mémoire (zéro réseau)
-  prog(65,'Analyse créneaux…');
+  prog(70,'Analyse créneaux…');
   const results=[];
 
   for(let ti=0;ti<pool.length;ti++){
     const t=pool[ti];
     log('━━ '+t.name+' ('+(ti+1)+'/'+pool.length+')','#1a3aff');
     log('  Fenêtres: '+wins.map(w=>w.dateStr).join(' | '));
-    prog(65+Math.round((ti/pool.length)*30),t.name+'…');
+    prog(70+Math.round((ti/pool.length)*28),t.name+'…');
 
     // Coords depuis cache (déjà géocodés)
     const homeCPV=extractCPV(t.address||'');
@@ -1243,39 +1267,50 @@ async function runSearch(){
         }
         if(!origins.length){log('  ✗ '+ftime(slot.from)+' pas de coords origine','#f04040');continue;}
         // Point d'arrivée après l'intervention
-        let endC=null,endLbl='';
-        if(nextEv){endC=evC(nextEv);endLbl='RDV suivant';}
-        else{endC=homeC||agC;endLbl='Retour domicile';}
+        let endC=null,endLbl='',nextRdv=null;
+        if(nextEv){
+          endC=evC(nextEv);endLbl='RDV suivant';
+          const loc=(nextEv.location||'').trim();
+          nextRdv={summary:nextEv.summary||'',ts:slot.nextTs,rawAddr:loc,unknown:!endC,assumed:null};
+          // Adresse inconnue (vide ou sans code postal) : même hypothèse que pour le RDV précédent
+          // (agence, sinon domicile) — plus « 0 km / 0 min » qui rendait tout créneau faisable
+          if(!endC){
+            endC=agC||homeC;nextRdv.assumed=agC?'agence':homeC?'domicile':null;
+            endLbl='RDV suivant (adresse inconnue → '+(nextRdv.assumed||'non vérifié')+')';
+          }
+        }
+        else{endC=homeC||agC;endLbl=homeC?'Retour domicile':'Retour agence';nextRdv={home:true,lbl:homeC?'domicile':'agence'};}
 
         let bestO=null;
+        const now=Date.now();
         for(const o of origins){
-          const legA=await osrmCached(o.c,dc);
-          if(!legA)continue;
-          const legB=endC?await osrmCached(dc,endC):null;
-          const base=endC?await osrmCached(o.c,endC):null;
-          // Début de journée : RDV possible dès l'ouverture (départ anticipé du domicile/agence)
-          const arrival=startOfDay?slot.from:slot.from+legA.dur*1000;
+          const {legA,legB,base,approx}=legsFor(o.c,dc,endC);
+          // Début de journée : départ anticipé du domicile/agence pour être chez le client dès l'ouverture,
+          // mais jamais avant MAINTENANT (recherche le jour même)
+          const arrival=startOfDay?Math.max(slot.from,now+legA.dur*1000):slot.from+legA.dur*1000;
           const dep=arrival-legA.dur*1000;
           const endWork=arrival+dur*60000;
+          if(arrival>=win.end){log('  ✗ '+ftime(slot.from)+' depuis '+o.lbl+' : arrivée '+ftime(arrival)+' après la fin de plage','#888');continue;}
           if(slot.nextTs){
-            const need=endWork+(legB?legB.dur*1000:0);
-            if(need>slot.nextTs){log('  ✗ '+ftime(slot.from)+' depuis '+o.lbl+' : trop juste avant RDV suivant','#888');continue;}
+            // Marge « tampon après chaque RDV » appliquée aussi après la nouvelle intervention
+            const need=endWork+settings.margin*60000+(legB?legB.dur*1000:0);
+            if(need>slot.nextTs){log('  ✗ '+ftime(slot.from)+' depuis '+o.lbl+' : trop juste avant RDV suivant ('+ftime(need)+' > '+ftime(slot.nextTs)+')','#888');continue;}
           }
           const cost=legA.dist+(legB?legB.dist:0)-(base?base.dist:0);
           // Début de journée : le tech démarre de la zone (domicile OU agence) la plus proche du client
           const better=!bestO||(startOfDay?legA.dist<bestO.legA.dist:cost<bestO.cost);
-          if(better)bestO={o,legA,legB,base,arrival,dep,endWork,cost};
+          if(better)bestO={o,legA,legB,base,arrival,dep,endWork,cost,approx};
         }
         if(!bestO)continue;
-        const {o,legA,arrival,dep,endWork,cost}=bestO;
-        if(endWork>win.end)log('  ⚠ '+ftime(slot.from)+' → fin '+ftime(endWork)+' (après 18h, heures sup)','#f57f17');
-        log('  ✓ '+ftime(arrival)+' depuis '+o.lbl+' → '+fdist(legA.dist)+' / détour '+fdist(Math.max(0,cost))+' ('+endLbl+')','#4cde80');
+        const {o,legA,legB,base,arrival,dep,endWork,cost,approx}=bestO;
+        if(endWork>win.end)log('  ⚠ '+ftime(arrival)+' → fin '+ftime(endWork)+' (après la fin de plage, heures sup)','#f57f17');
+        log('  ✓ '+ftime(arrival)+' depuis '+o.lbl+' → '+fdist(legA.dist)+' / détour '+fdist(Math.max(0,cost))+(approx?' (estimé)':'')+' ('+endLbl+')','#4cde80');
         const travelTo={dist:legA.dist,dur:legA.dur,_from:o.c};
         const cand={
           t,
           slot:{from:arrival,to:endWork,dep,originLabel:o.lbl,
-                approxAddr:false,travelTo,prevRdv,originCoords:o.c},
-          win,travel:travelTo,originLbl:o.lbl,cost,_costRest:cost-legA.dist
+                approxAddr:false,travelTo,prevRdv,nextRdv,originCoords:o.c},
+          win,travel:travelTo,originLbl:o.lbl,cost,approx,legB,base
         };
         // Meilleur créneau du jour = détour minimal (puis le plus tôt)
         if(!best||cost<best.cost-500||(Math.abs(cost-best.cost)<=500&&arrival<best.slot.from)){
@@ -1300,24 +1335,7 @@ async function runSearch(){
     if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date; // même distance → date
     return a.t.name.localeCompare(b.t.name,'fr'); // même date → ordre alphabétique
   });
-  // Enrichir TOUS les résultats avec les vraies distances OSRM (routières) via une seule matrice
-  // (avant : 15 appels /route séquentiels sur le top haversine uniquement)
-  prog(95,'Calcul distances routières…');
-  const origins=results.map(r=>r.slot&&r.slot.travelTo&&r.slot.travelTo._from).filter(Boolean);
-  const real=await osrmTable(origins,dc);
-  for(const r of results){
-    const orig=r.slot&&r.slot.travelTo&&r.slot.travelTo._from;
-    const rv=orig&&real.get(orig.lat+','+orig.lon);
-    if(rv){const tr={dist:rv.dist,dur:rv.dur,_from:orig};r.travel=tr;r.slot.travelTo=tr;r.cost=r._costRest+rv.dist;}
-  }
-  log('Distances routières: '+real.size+' origine(s) via OSRM','#4cde80');
-  // Re-trier avec vraies distances routières
-  results.sort((a,b)=>{
-    const da=a.cost,db=b.cost;
-    if(Math.abs(da-db)>500)return da-db;
-    if(a.win.date.getTime()!==b.win.date.getTime()) return a.win.date-b.win.date;
-    return a.t.name.localeCompare(b.t.name,'fr');
-  });
+  // (Distances déjà routières : plus de ré-enrichissement après coup, qui mélangeait route et vol d'oiseau)
   const top=results.slice(0,15);
   top.sort((a,b)=>{
     const da=a.cost,db=b.cost;
@@ -1432,8 +1450,10 @@ function updateMap(dc,results){
         // Pas de coords → placer quand même à la destination avec une note
         markerIdx++; return;
       }
-      const slotLbl=fdate(r.win.date)+' · '+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end));
-      addTechMarker(orig.lat,orig.lon,r.t,markerIdx,fdist(r.travel.dist),r.slot.originLabel||'',slotLbl);
+      const slotLbl=fdate(r.win.date)+' · '+ftime(r.slot.from)+'–'+ftime(r.slot.to)+(r.slot.to>r.win.end?' ⚠':'');
+      const nr=r.slot.nextRdv;
+      const nextLbl=!nr?'':nr.home?' · ensuite retour '+nr.lbl:' · ensuite RDV '+ftime(nr.ts)+(nr.unknown?' (adresse inconnue)':'');
+      addTechMarker(orig.lat,orig.lon,r.t,markerIdx,'+'+fdist(Math.max(0,r.cost))+' détour · aller '+fdist(r.travel.dist),esc(r.slot.originLabel||'')+nextLbl,slotLbl);
       bounds.push([orig.lat,orig.lon]);
       markerIdx++;
     });
@@ -1514,11 +1534,11 @@ function renderResults(res,total,errors,dest,dc,dur){
     const isToday=r.win.date.toDateString()===new Date().toDateString();
     const dateLbl=isToday?"Aujourd'hui":fdate(r.win.date);
 
-    // Distance badge (top right)
+    // Badge (en haut à droite) : le DÉTOUR est le critère de classement → chiffre principal
     const distBadge=r.travel
-      ?'<span style="font-size:15px;font-weight:800;color:var(--accent);">'+fdist(r.travel.dist)+'</span>'
-       +'<span style="font-size:10px;color:var(--muted);display:block;">'+fdur(r.travel.dur)+'</span>'
-       +(r.cost!=null?'<span style="font-size:10px;color:var(--muted);display:block;" title="Km supplémentaires réels : aller + vers point suivant − trajet déjà prévu">détour '+fdist(Math.max(0,r.cost))+'</span>':'')
+      ?'<span style="font-size:15px;font-weight:800;color:var(--accent);" title="Km supplémentaires réels : aller + vers point suivant − trajet déjà prévu (critère de classement)">+'+fdist(Math.max(0,r.cost))+'</span>'
+       +'<span style="font-size:10px;color:var(--muted);display:block;">détour'+(r.approx?' (estimé)':'')+'</span>'
+       +'<span style="font-size:10px;color:var(--muted);display:block;">aller '+fdist(r.travel.dist)+' · '+fdur(r.travel.dur)+'</span>'
       :'—';
 
     // RDV précédent block
@@ -1526,17 +1546,35 @@ function renderResults(res,total,errors,dest,dc,dur){
       if(!r.slot.prevRdv)return '';
       const pr=r.slot.prevRdv;
       const failed=pr.geocodeFailed?' <span style="color:var(--orange)">⚠</span>':'';
-      const addrShort=(pr.rawAddr||'').length>50?pr.rawAddr.substring(0,48)+'…':(pr.rawAddr||'<em>sans adresse</em>');
+      const addrShort=(pr.rawAddr||'').length>50?esc(pr.rawAddr.substring(0,48))+'…':(pr.rawAddr?esc(pr.rawAddr):'<em>sans adresse</em>');
       return '<div style="margin-top:5px;padding:4px 8px;background:var(--surface2);border-radius:5px;border-left:3px solid '+(pr.geocodeFailed?'var(--orange)':'var(--border)')+';">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">'
         +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;white-space:nowrap;">RDV préc.</span>'
-        +(pr.summary?'<span style="font-size:10px;font-weight:600;color:var(--text);margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">'+pr.summary.substring(0,22)+'</span>':'')
+        +(pr.summary?'<span style="font-size:10px;font-weight:600;color:var(--text);margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">'+esc(pr.summary.substring(0,22))+'</span>':'')
         +(pr.evDist!=null?'<span style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;padding-left:4px;">📍'+pr.evDist.toFixed(1)+'km</span>':'')
         +'</div>'
-        +'<div style="font-size:10px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(pr.rawAddr||'')+'">'
+        +'<div style="font-size:10px;font-family:IBM Plex Mono,monospace;color:'+(pr.geocodeFailed?'var(--orange)':'var(--muted)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(pr.rawAddr||'')+'">'
         +addrShort+failed+'</div>'
         +'</div>';
     })();
+
+    // Point suivant (RDV suivant ou retour) : c'est lui qui fait le détour → affiché
+    const nextBlock=(()=>{
+      const nr=r.slot.nextRdv;if(!nr)return '';
+      if(nr.home)return '<div style="margin-top:4px;font-size:10px;color:var(--muted);font-family:IBM Plex Mono,monospace;">↳ Ensuite : retour '+nr.lbl+(r.legB?' ('+fdist(r.legB.dist)+' · '+fdur(r.legB.dur)+')':'')+'</div>';
+      const raw=nr.rawAddr||'';
+      const addr=(raw.length>50?esc(raw.substring(0,48))+'…':esc(raw))
+        +(nr.unknown?(raw?' (sans code postal)':'<em>sans adresse</em>')+' → supposé '+(nr.assumed?'à l\''+nr.assumed:'non vérifié')+' ⚠':'');
+      return '<div style="margin-top:5px;padding:4px 8px;background:var(--surface2);border-radius:5px;border-left:3px solid '+(nr.unknown?'var(--orange)':'var(--accent)')+';">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">'
+        +'<span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;white-space:nowrap;">RDV suiv. '+ftime(nr.ts)+'</span>'
+        +(nr.summary?'<span style="font-size:10px;font-weight:600;color:var(--text);margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">'+esc(nr.summary.substring(0,22))+'</span>':'')
+        +(r.legB&&!nr.unknown?'<span style="font-size:10px;color:var(--accent);font-weight:700;white-space:nowrap;padding-left:4px;">↳'+fdist(r.legB.dist)+' · '+fdur(r.legB.dur)+'</span>':'')
+        +'</div>'
+        +'<div style="font-size:10px;font-family:IBM Plex Mono,monospace;color:'+(nr.unknown?'var(--orange)':'var(--muted)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(raw)+'">'+addr+'</div>'
+        +'</div>';
+    })();
+    const overtime=r.slot.to>r.win.end;
 
     const _lat=r.slot.originCoords?r.slot.originCoords.lat:null;
     const _lon=r.slot.originCoords?r.slot.originCoords.lon:null;
@@ -1566,10 +1604,11 @@ function renderResults(res,total,errors,dest,dc,dur){
         +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;">'
           +'<span class="day-badge" style="font-size:10px;padding:2px 7px;">📅 '+dateLbl+'</span>'
           +(r.slot.dep?'<span class="pill pill-dep" style="font-size:10px;padding:2px 6px;">🚗'+ftime(r.slot.dep)+'</span>':'')
-          +'<span class="pill pill-free" style="font-size:10px;padding:2px 6px;">🟢'+ftime(r.slot.from)+'–'+ftime(Math.min(r.slot.to,r.win.end))+'</span>'
+          +'<span class="pill pill-free" style="font-size:10px;padding:2px 6px;'+(overtime?'color:var(--orange);':'')+'"'+(overtime?' title="Fin après '+ftime(r.win.end)+' (heures sup)"':'')+'>🟢'+ftime(r.slot.from)+'–'+ftime(r.slot.to)+(overtime?' ⚠':'')+'</span>'
         +'</div>'
-        // RDV précédent
+        // RDV précédent → RDV suivant
         +prevBlock
+        +nextBlock
         // Itinéraire
         +(()=>{
           const dd=r.win.date,yy=dd.getFullYear(),mm=dd.getMonth()+1,jj=dd.getDate();
